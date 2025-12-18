@@ -1,0 +1,20 @@
+# Ansible
+*.retry
+*.log
+.fact_cache/
+.vscode/
+.idea/
+
+# Secrets / local overrides
+.env
+secrets/
+out/
+tmp/
+*.key
+*.pem
+*.p12
+*.crt
+*.der
+
+# Vault password file (ak použiješ)
+.vault_pass
