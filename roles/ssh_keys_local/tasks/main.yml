@@ -1,0 +1,25 @@
+- name: Ensure local ssh key directory exists (control node)
+  delegate_to: localhost
+  become: false
+  ansible.builtin.file:
+    path: "{{ ssh_key_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Generate human key for this host if missing
+  delegate_to: localhost
+  become: false
+  ansible.builtin.command:
+    cmd: >
+      ssh-keygen -t ed25519 -C "joseph@{{ ansible_host }}" -a 64 -N "" -f "{{ ssh_key_human_private }}"
+  args:
+    creates: "{{ ssh_key_human_private }}"
+
+- name: Generate ansible key for this host if missing
+  delegate_to: localhost
+  become: false
+  ansible.builtin.command:
+    cmd: >
+      ssh-keygen -t ed25519 -C "ansible@{{ ansible_host }}" -a 64 -N "" -f "{{ ssh_key_ansible_private }}"
+  args:
+    creates: "{{ ssh_key_ansible_private }}"

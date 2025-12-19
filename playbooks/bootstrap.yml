@@ -1,0 +1,10 @@
+---
+- name: Bootstrap access and ansible user
+  hosts: servers
+  gather_facts: true
+
+  roles:
+    - role: ssh_keys_local
+    - role: common
+    - role: bootstrap_access
+    - role: users_ansible

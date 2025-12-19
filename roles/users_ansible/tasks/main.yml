@@ -1,0 +1,29 @@
+---
+- name: Create ansible managed user
+  ansible.builtin.user:
+    name: "{{ ansible_managed_user }}"
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+- name: Ensure groups for ansible user
+  ansible.builtin.user:
+    name: "{{ ansible_managed_user }}"
+    groups: "{{ ansible_managed_groups }}"
+    append: true
+
+- name: Install SSH key for ansible user (host-specific)
+  ansible.posix.authorized_key:
+    user: "{{ ansible_managed_user }}"
+    key: "{{ lookup('file', ssh_key_ansible_public) }}"
+    state: present
+
+- name: Configure sudoers for ansible user
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/{{ ansible_managed_user }}"
+    owner: root
+    group: root
+    mode: "0440"
+    content: |
+      {{ ansible_managed_user }} ALL=(ALL) {{ 'NOPASSWD:' if ansible_sudo_nopasswd else '' }}ALL
+    validate: "visudo -cf %s"

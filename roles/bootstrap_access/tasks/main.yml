@@ -1,0 +1,12 @@
+---
+- name: Ensure joseph user exists
+  ansible.builtin.user:
+    name: joseph
+    state: present
+    create_home: true
+
+- name: Install joseph authorized key (host-specific)
+  ansible.posix.authorized_key:
+    user: joseph
+    key: "{{ lookup('file', ssh_key_human_public) }}"
+    state: present
