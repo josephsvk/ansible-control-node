@@ -1,0 +1,15 @@
+sudo tee /usr/local/bin/ansible-sign-cert >/dev/null <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+ssh-keygen \
+  -s "$HOME/.ssh/ca/ansible/ca_ansible" \
+  -I "ansible@control" \
+  -n ansible \
+  -V +2h \
+  -O no-agent-forwarding \
+  -O no-port-forwarding \
+  -O no-pty \
+  -O no-user-rc \
+  "$HOME/.ssh/id_ed25519_ansible.pub" >/dev/null
+EOF
+sudo chmod 755 /usr/local/bin/ansible-sign-cert

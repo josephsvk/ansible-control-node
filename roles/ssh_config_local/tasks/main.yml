@@ -1,0 +1,27 @@
+---
+- name: Ensure ~/.ssh/config.d exists
+  delegate_to: localhost
+  become: false
+  ansible.builtin.file:
+    path: "{{ lookup('env','HOME') ~ '/.ssh/config.d' }}"
+    state: directory
+    mode: "0700"
+
+- name: Ensure ~/.ssh/config includes config.d
+  delegate_to: localhost
+  become: false
+  ansible.builtin.blockinfile:
+    path: "{{ lookup('env','HOME') ~ '/.ssh/config' }}"
+    create: true
+    mode: "0600"
+    marker: "# {mark} ANSIBLE MANAGED INCLUDE"
+    block: |
+      Include ~/.ssh/config.d/*.conf
+
+- name: Render ansible hosts ssh config
+  delegate_to: localhost
+  become: false
+  ansible.builtin.template:
+    src: ansible_hosts.conf.j2
+    dest: "{{ lookup('env','HOME') ~ '/.ssh/config.d/ansible_hosts.conf' }}"
+    mode: "0600"

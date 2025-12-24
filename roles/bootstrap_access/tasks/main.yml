@@ -10,3 +10,4 @@
     user: joseph
     key: "{{ lookup('file', ssh_key_human_public) }}"
     state: present
+

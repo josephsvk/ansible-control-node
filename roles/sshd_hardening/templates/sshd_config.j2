@@ -1,0 +1,19 @@
+Port 22
+Protocol 2
+
+PermitRootLogin {{ 'yes' if sshd_allow_root else 'no' }}
+PasswordAuthentication {{ 'yes' if sshd_allow_password else 'no' }}
+PubkeyAuthentication {{ 'yes' if sshd_pubkey_auth else 'no' }}
+
+TrustedUserCAKeys /etc/ssh/trusted_user_ca/ca_human.pub /etc/ssh/trusted_user_ca/ca_ansible.pub
+AuthorizedPrincipalsFile /etc/ssh/auth_principals/%u
+
+ChallengeResponseAuthentication no
+UsePAM yes
+
+X11Forwarding no
+AllowTcpForwarding yes
+AllowAgentForwarding yes
+PrintMotd yes
+
+Subsystem sftp /usr/lib/openssh/sftp-server

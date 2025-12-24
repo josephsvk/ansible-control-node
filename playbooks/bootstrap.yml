@@ -1,6 +1,7 @@
 ---
 - name: Bootstrap access and ansible user
-  hosts: servers
+  hosts: node
+
   gather_facts: true
 
   roles:
@@ -8,3 +9,5 @@
     - role: common
     - role: bootstrap_access
     - role: users_ansible
+    - role: sshd_hardening
+

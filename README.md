@@ -21,3 +21,9 @@ zmena usera v hosts > ansible
     - add sudo to ansible 
 
 
+# wokrstation instalacia 
+
+    - zmena usera na joseph potom na ansible 
+    - najprv použit spustienie z heslom aj pre sudo ked treba 
+        --ask-pass --become --ask-become-pass
+    -

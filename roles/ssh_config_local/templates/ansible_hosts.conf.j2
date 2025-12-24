@@ -1,0 +1,9 @@
+# Generated from Ansible inventory. Do not edit.
+
+{% for h in groups['lab'] | sort %}
+Host {{ h }}
+  HostName {{ hostvars[h].ansible_host | default(h) }}
+  User {{ hostvars[h].ansible_user | default('ansible') }}
+  IdentitiesOnly yes
+  IdentityFile {{ (hostvars[h].ssh_key_dir | default(lookup('env','HOME') ~ '/.ssh')) ~ '/' ~ (hostvars[h].ssh_identity_prefix | default(h)) ~ '_' ~ (hostvars[h].ansible_user | default('ansible')) ~ '_ed25519' }}
+{% endfor %}

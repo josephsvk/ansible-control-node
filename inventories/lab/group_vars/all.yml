@@ -8,7 +8,7 @@ ansible_managed_groups: ["sudo"]
 ansible_sudo_nopasswd: true
 
 # po bootstrap-e sa pripájame ako automation user
-ansible_user: ansible
+ansible_user: joseph
 
 # kde sa držia kľúče na control node
 ssh_key_dir: "{{ lookup('env','HOME') ~ '/.ssh' }}"
@@ -22,3 +22,14 @@ ssh_key_human_public:  "{{ ssh_key_human_private }}.pub"
 
 ssh_key_ansible_private: "{{ ssh_key_dir }}/{{ ssh_identity_prefix }}_ansible_ed25519"
 ssh_key_ansible_public:  "{{ ssh_key_ansible_private }}.pub"
+
+sshd_allow_password: true
+sshd_allow_root: false
+sshd_pubkey_auth: true
+
+ssh_principals:
+  ansible:
+    - ansible
+  joseph:
+    - admin
+    - emergency
