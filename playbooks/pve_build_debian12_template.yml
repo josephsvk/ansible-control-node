@@ -1,0 +1,83 @@
+- name: Build Debian 12 cloud-init template
+  hosts: pve
+  gather_facts: false
+  vars:
+    pve_ssh_host: "{{ pve_api_host }}"
+  tasks:
+    - name: Create base VM
+      community.general.proxmox_kvm:
+        api_host: "{{ pve_api_host }}"
+        api_user: "{{ pve_api_user }}"
+        api_token_id: "{{ pve_api_token_id }}"
+        api_token_secret: "{{ pve_api_token_secret }}"
+        node: "{{ pve_node }}"
+        vmid: "{{ tmpl_vmid }}"
+        name: "{{ tmpl_name }}"
+        memory: "{{ tmpl_memory }}"
+        cores: "{{ tmpl_cores }}"
+        cpu: "host"
+        scsihw: "virtio-scsi-pci"
+        net:
+          net0: "virtio,bridge={{ tmpl_bridge }}"
+        serial:
+          serial0: "socket"
+        vga: "serial0"
+        agent: "enabled=1"
+        onboot: true
+        ostype: "l26"
+        state: present
+
+    - name: Import qcow2 disk
+      ansible.builtin.command:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no root@{{ pve_ssh_host }}
+          "qm importdisk {{ tmpl_vmid }} /var/lib/vz/template/images/{{ debian_cloudimg_filename }} {{ pve_storage_disk }} --format qcow2"
+      changed_when: true
+
+    - name: Attach disk as scsi0
+      ansible.builtin.command:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no root@{{ pve_ssh_host }}
+          "qm set {{ tmpl_vmid }} --scsi0 {{ pve_storage_disk }}:vm-{{ tmpl_vmid }}-disk-0,discard=on,ssd=1"
+      changed_when: true
+
+    - name: Add cloud-init drive
+      ansible.builtin.command:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no root@{{ pve_ssh_host }}
+          "qm set {{ tmpl_vmid }} --ide2 {{ pve_storage_disk }}:cloudinit"
+      changed_when: true
+
+    - name: Set boot order
+      ansible.builtin.command:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no root@{{ pve_ssh_host }}
+          "qm set {{ tmpl_vmid }} --boot order=scsi0"
+      changed_when: true
+
+    - name: Resize disk
+      ansible.builtin.command:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no root@{{ pve_ssh_host }}
+          "qm resize {{ tmpl_vmid }} scsi0 {{ tmpl_disk_gb }}G"
+      changed_when: true
+
+    - name: Read SSH pubkey
+      ansible.builtin.set_fact:
+        ci_ssh_pubkey: "{{ lookup('file', ci_ssh_pubkey_path | expanduser) }}"
+
+    - name: Set cloud-init identity
+      ansible.builtin.command:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no root@{{ pve_ssh_host }}
+          "qm set {{ tmpl_vmid }} --ciuser {{ ci_user }} --timezone {{ ci_timezone }} --ipconfig0 ip=dhcp --sshkeys /dev/stdin"
+      args:
+        stdin: "{{ ci_ssh_pubkey }}"
+      changed_when: true
+
+    - name: Convert to template
+      ansible.builtin.command:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no root@{{ pve_ssh_host }}
+          "qm template {{ tmpl_vmid }}"
+      changed_when: true

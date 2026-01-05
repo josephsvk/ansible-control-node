@@ -1,0 +1,14 @@
+---
+- name: Install wireguard package
+  ansible.builtin.apt:
+    update_cache: yes
+    name: wireguard
+    state: present
+  
+# call new client
+
+- name: run wg-quick for client
+  ansible.builtin.systemd:
+    name: "wg-quick@wg3"
+    state: started
+    enabled: yes

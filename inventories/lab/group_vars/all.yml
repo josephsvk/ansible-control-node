@@ -33,3 +33,19 @@ ssh_principals:
   joseph:
     - admin
     - emergency
+
+
+users: 
+  - name: ansible
+    uid: 1001
+    groups: [sudo]
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+  - name: joseph
+    uid: 1000
+    groups: [sudo]
+    shell: /bin/bash
+    create_home: true
+    state: present

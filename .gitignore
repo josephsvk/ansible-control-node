@@ -18,3 +18,8 @@ tmp/
 
 # Vault password file (ak použiješ)
 .vault_pass
+*vault-pass*
+
+# enviromentalne prostrenie
+.venv/
+collections/ansible_collections

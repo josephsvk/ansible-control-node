@@ -1,0 +1,7 @@
+---
+- name: Create user
+  ansible.builtin.user:
+    name: "joseph"
+    shell: /bin/bash
+    create_home: true
+    state: present
