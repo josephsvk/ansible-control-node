@@ -1,0 +1,47 @@
+- import_tasks: preflight.yml
+
+- name: Ensure local ssh directories exist
+  delegate_to: localhost
+  become: false
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ ssh_key_dir_local }}"
+    - "{{ ssh_config_dir_local }}"
+
+- name: Generate keypair for ansible user on control node (per host)
+  delegate_to: localhost
+  become: false
+  community.crypto.openssh_keypair:
+    path: "{{ ssh_key_path_local }}"
+    type: ed25519
+    comment: "{{ canonical_name | default(inventory_hostname) }}:ansible"
+    mode: "0600"
+  register: _ansible_key
+
+- name: Install ansible public key on remote (into ansible user)
+  become: true
+  ansible.posix.authorized_key:
+    user: "{{ ssh_remote_user }}"
+    key: "{{ _ansible_key.public_key }}"
+    state: present
+    manage_dir: true
+
+- name: Write per-host SSH config snippet (control node)
+  delegate_to: localhost
+  become: false
+  copy:
+    dest: "{{ ssh_config_dir_local }}/{{ canonical_name | default(inventory_hostname) }}.conf"
+    mode: "0600"
+    content: |
+      Host {{ canonical_name | default(inventory_hostname) }}
+        HostName {{ ssh_remote_host }}
+        User {{ ssh_remote_user }}
+        Port {{ ssh_remote_port }}
+        IdentityFile {{ ssh_key_path_local }}
+        IdentitiesOnly yes
+        PreferredAuthentications publickey
+        ServerAliveInterval 30
+        ServerAliveCountMax 3

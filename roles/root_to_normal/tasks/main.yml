@@ -1,0 +1,77 @@
+---
+# roles/root_to_normal/tasks/main.yml
+- name: Preflight - users_manage must be defined and a list
+  ansible.builtin.assert:
+    that:
+      - users_manage is defined
+      - users_manage is iterable
+      - users_manage | length > 0
+    fail_msg: "users_manage missing/empty. Define group_vars/all/users.yml"
+  tags: [preflight]
+
+# Step 1 > update
+
+- name: Ensure apt cache is up to date (Debian/Ubuntu)
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_facts.os_family == "Debian"
+
+- name: Upgrade packages (safe)
+  ansible.builtin.apt:
+    upgrade: "safe"
+  when: ansible_facts.os_family == "Debian"
+
+# Step 2 > sudo 
+
+- name: Ensure sudo is installed (Debian/Proxmox)
+  ansible.builtin.apt:
+    name: sudo
+    state: present
+    update_cache: true
+  when: ansible_facts.os_family == "Debian"
+  become: "{{ (ansible_user_id != 'root') | bool }}"
+  tags: [bootstrap]
+
+# Step 3 > Users
+
+- name: Ensure required groups exist
+  ansible.builtin.group:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ (users_manage | map(attribute='groups') | list | flatten | unique) | default([]) }}"
+
+- name: Create users
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    uid: "{{ item.uid | default(omit) }}"
+    groups: "{{ item.groups | default(omit) }}"
+    append: true
+    shell: "{{ item.shell | default('/bin/bash') }}"
+    create_home: "{{ item.create_home | default(true) }}"
+    state: present
+  loop: "{{ users_manage }}"
+
+- name: Configure passwordless sudo for selected users
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/90-ansible-bootstrap"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+    content: |
+      {% for u in users_manage | default([]) %}
+      {% if (u.sudo_nopasswd | default(false)) | bool %}
+      {{ u.name }} ALL=(ALL) NOPASSWD:ALL
+      {% endif %}
+      {% endfor %}
+
+- name: Remove legacy per-user sudoers files (optional cleanup)
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/{{ item.name }}"
+    state: absent
+  loop: "{{ users_manage | default([]) }}"
+  when: item.sudo_nopasswd | default(false) | bool
+
+
+

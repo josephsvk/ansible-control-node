@@ -1,0 +1,42 @@
+- name: Preflight - Debian only
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.os_family == "Debian"
+    fail_msg: "security_fail2ban: supported only on Debian-family in this role"
+
+- name: Install fail2ban
+  ansible.builtin.apt:
+    name: [fail2ban]
+    state: present
+    update_cache: true
+
+- name: Configure fail2ban jail.local
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.d/sshd.local
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [DEFAULT]
+      backend = {{ fail2ban_backend }}
+      bantime = {{ fail2ban_bantime }}
+      findtime = {{ fail2ban_findtime }}
+      maxretry = {{ fail2ban_maxretry }}
+      ignoreip = 127.0.0.1/8 ::1 {{ fail2ban_ignoreips | join(' ') }}
+      {% if fail2ban_destemail|length > 0 %}
+      destemail = {{ fail2ban_destemail }}
+      sender = {{ fail2ban_sender }}
+      {% endif %}
+      banaction = {{ fail2ban_action }}
+
+      [sshd]
+      enabled = true
+      port = ssh
+      logpath = %(sshd_log)s
+  notify: Restart fail2ban
+
+- name: Ensure fail2ban enabled and running
+  ansible.builtin.service:
+    name: fail2ban
+    state: started
+    enabled: true

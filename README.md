@@ -48,3 +48,18 @@ export EDITOR="code --wait"
 ansible-vault edit inventories/lab/group_vars/all/vault.yml \
   --vault-password-file ~/.config/ansible/vault-pass-prod
 
+# krok po kroku vyvoj a testovanie upravy konfigu step 1 pridanie testovanych zniem 
+
+    povoleni prihlasenia sa pomocou ssh key 
+    bude potrebn pridat ešte spravny key 
+    
+
+
+root > inštalacia sudo a usera ansible 
+ansible user > inštalacia klučov ssh 
+
+# testovanie 
+ 
+ ansible-playbook -i inventories/lab/hosts.yml playbooks/bootstrap_root_v1.yml --ask-pass --limit pve1
+
+

@@ -1,0 +1,9 @@
+ssh_key_dir_local: "{{ lookup('env','HOME') + '/.ssh' }}"
+ssh_config_dir_local: "{{ ssh_key_dir_local }}/config.d"
+
+ssh_key_name: "{{ canonical_name | default(inventory_hostname) }}_ansible_ed25519"
+ssh_key_path_local: "{{ ssh_key_dir_local }}/{{ ssh_key_name }}"
+
+ssh_remote_user: "ansible"
+ssh_remote_port: "{{ ansible_port | default(22) }}"
+ssh_remote_host: "{{ ansible_host | default(inventory_hostname) }}"

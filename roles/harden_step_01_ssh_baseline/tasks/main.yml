@@ -1,0 +1,49 @@
+---
+# roles/harden_step_01_ssh_baseline/tasks/main.yml
+- name: Install openssh-server
+  ansible.builtin.apt:
+    name: [openssh-server]
+    state: present
+    update_cache: false
+
+- name: Ensure sshd_config.d exists
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    mode: "0755"
+
+- name: Apply sshd_config hardening
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^{{ item.key }}\\s+"
+    line: "{{ item.key }} {{ item.value }}"
+    create: false
+    backrefs: false
+  loop:
+    - { key: "PasswordAuthentication", value: "{{ sshd_password_auth }}" }
+    - { key: "PermitRootLogin", value: "{{ sshd_permit_root_login }}" }
+    - { key: "PubkeyAuthentication", value: "{{ sshd_pubkey_auth }}" }
+    - { key: "KbdInteractiveAuthentication", value: "{{ sshd_kbd_interactive }}" }
+    - { key: "X11Forwarding", value: "{{ sshd_x11_forwarding }}" }
+    - { key: "ClientAliveInterval", value: "{{ sshd_client_alive_interval }}" }
+    - { key: "ClientAliveCountMax", value: "{{ sshd_client_alive_countmax }}" }
+    - { key: "MaxAuthTries", value: "{{ sshd_max_auth_tries }}" }
+    - { key: "LoginGraceTime", value: "{{ sshd_login_grace_time }}" }
+  notify: Restart sshd
+
+- name: AllowUsers (append/update)
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^AllowUsers\\s+"
+    line: "AllowUsers {{ sshd_allow_users | join(' ') }}"
+  notify: Restart sshd
+
+- name: Validate sshd config
+  ansible.builtin.command: sshd -t
+  changed_when: false
+
+- name: Ensure sshd enabled and running
+  ansible.builtin.service:
+    name: ssh
+    state: started
+    enabled: true

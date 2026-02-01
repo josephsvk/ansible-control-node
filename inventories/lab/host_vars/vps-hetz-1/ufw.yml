@@ -1,0 +1,9 @@
+ufw_use_bundles:
+  - base
+  - wireguard
+  # - web
+
+ufw_rules_host: []
+# sem dáš unikáty len pre tento host, ak treba
+# ufw_rules_host:
+#   - { rule: allow, port: "9100", proto: tcp, src: "10.0.0.0/8", comment: "node_exporter" }

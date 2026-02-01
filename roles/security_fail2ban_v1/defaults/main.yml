@@ -1,0 +1,9 @@
+fail2ban_enabled: true
+fail2ban_bantime: 3600
+fail2ban_findtime: 600
+fail2ban_maxretry: 5
+fail2ban_backend: systemd
+fail2ban_ignoreips: []
+fail2ban_destemail: ""
+fail2ban_sender: ""
+fail2ban_action: "iptables-multiport"   # ak používaš nftables, prepneme neskôr

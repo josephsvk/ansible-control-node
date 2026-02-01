@@ -1,0 +1,20 @@
+---
+# roles/harden_step_02_ssh_restrictions/tasks/main.yml
+- name: Append restriction snippet
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/98-restrictions.conf
+    mode: "0644"
+    content: |
+      AllowUsers ansible joseph
+      AllowTcpForwarding yes
+      PermitTunnel no
+      PermitUserEnvironment no
+
+- name: Validate sshd config
+  ansible.builtin.command: sshd -t
+  changed_when: false
+
+- name: Restart ssh service
+  ansible.builtin.service:
+    name: ssh
+    state: restarted

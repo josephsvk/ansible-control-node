@@ -1,0 +1,10 @@
+---
+- name: Bootstrap root
+  hosts: bootstrap            # skupina
+  #remote_user: root     # User
+  become: false         # Nepoužíva sudo / privilege escalation
+  gather_facts: true    # Zistí systémové fakty (OS, arch, sieť)
+
+  roles:
+    - role: root_to_normal      # root Bootstrap
+    - role: ssh_key_setup_v1 

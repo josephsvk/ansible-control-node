@@ -1,0 +1,9 @@
+ufw_default_incoming: "deny"
+ufw_default_outgoing: "allow"
+ufw_default_routed: "deny"
+
+ufw_use_bundles: []
+ufw_rules_host: []
+ufw_bundles: {}   # bude doplnené z group_vars/all/ufw_bundles.yml
+
+ufw_enabled: true

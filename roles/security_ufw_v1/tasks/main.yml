@@ -1,0 +1,51 @@
+---
+#roles/security_ufw_v1/tasks/main.yml
+
+- name: Install ufw
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+    update_cache: false
+  become: true
+
+- name: Compose ufw_rules from bundles + host rules
+  ansible.builtin.set_fact:
+    ufw_rules: >-
+      {{
+        (ufw_use_bundles | default([]))
+        | map('extract', ufw_bundles | default({}))
+        | list
+        | flatten
+        + (ufw_rules_host | default([]))
+      }}
+
+- name: Set default policies
+  community.general.ufw:
+    direction: incoming
+    policy: "{{ ufw_default_incoming }}"
+  become: true
+
+- name: Set default outgoing policy
+  community.general.ufw:
+    direction: outgoing
+    policy: "{{ ufw_default_outgoing }}"
+  become: true
+
+- name: Apply UFW rules
+  community.general.ufw:
+    rule: "{{ item.rule }}"
+    port: "{{ item.port | default(omit) }}"
+    proto: "{{ item.proto | default('tcp') }}"
+    src: "{{ item.src | default(omit) }}"
+    dest: "{{ item.dest | default(omit) }}"
+    to_ip: "{{ item.to_ip | default(omit) }}"
+    from_ip: "{{ item.from_ip | default(omit) }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ ufw_rules | default([]) }}"
+  become: true
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled
+  when: ufw_enabled | bool
+  become: true

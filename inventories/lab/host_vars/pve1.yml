@@ -1,0 +1,20 @@
+pve_node: pve1
+
+tmpl_vmid: 9000
+tmpl_name: "debian-12-cloudinit"
+tmpl_cores: 2
+tmpl_memory: 2048
+tmpl_bridge: "vmbr0"
+tmpl_storage: "local-lvm"
+
+cloudimg_url: "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2"
+cloudimg_filename: "debian-12-genericcloud-amd64.qcow2"
+
+# balíky, ktoré budú natvrdo v template (minimal sane baseline)
+tmpl_packages:
+  - qemu-guest-agent
+  - cloud-init
+  - sudo
+  - ca-certificates
+  - curl
+  - gnupg

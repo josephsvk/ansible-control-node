@@ -1,0 +1,15 @@
+timezone: "Europe/Prague"
+
+# kde sa držia kľúče na control node
+ssh_key_dir_local: "{{ lookup('env','HOME') ~ '/.ssh' }}"
+
+bootstrap_users:
+  - name: ansible
+    state: present
+    generate_mode: local
+
+  - name: joseph
+    state: present
+    generate_mode: external
+    public_key_source: workstation1   # len zdroj public key, nie miesto generovania
+    public_key_path: "/home/joseph/.ssh/id_ed25519.pub"

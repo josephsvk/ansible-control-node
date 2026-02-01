@@ -1,0 +1,43 @@
+- name: Hardening step-by-step to zero trust
+  hosts: managed
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Step 01 - SSH baseline
+      ansible.builtin.include_role:
+        name: harden_step_01_ssh_baseline
+
+    - name: Canary after step 01
+      ansible.builtin.include_role:
+        name: canary_ssh
+
+    - name: Step 02 - SSH restrictions
+      ansible.builtin.include_role:
+        name: harden_step_02_ssh_restrictions
+
+    - name: Canary after step 02
+      ansible.builtin.include_role:
+        name: canary_ssh
+
+    - name: fail2ban setup 
+      ansible.builtin.include_role:
+        name: security_fail2ban_v1
+
+    - name: Canary after fail2ban setup
+      ansible.builtin.include_role:
+        name: canary_ssh
+      
+    - name: ufw setup
+      ansible.builtin.include_role:
+        name: security_ufw_v1
+
+    - name: Canary after UFW setup
+      ansible.builtin.include_role:
+        name: canary_ssh
+
+    #- role: harden_step_03_sudo_tighten
+    #- role: canary_ssh
+
+    #- role: harden_step_04_firewall
+    #- role: canary_ssh

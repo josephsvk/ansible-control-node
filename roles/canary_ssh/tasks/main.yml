@@ -1,0 +1,29 @@
+---
+# roles/canary_ssh/tasks/main.yml
+- name: Canary - ping
+  ansible.builtin.ping:
+
+- name: Canary - become works
+  ansible.builtin.command: id
+  become: true
+  changed_when: false
+
+- name: Canary - sshd config ok
+  ansible.builtin.command: sshd -t
+  become: true
+  changed_when: false
+
+- name: Canary - sshd active
+  ansible.builtin.command: systemctl is-active ssh
+  become: true
+  changed_when: false
+  failed_when: _sshd_active.stdout.strip() != "active"
+  register: _sshd_active
+
+- name: Canary - port 22 reachable from control node
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host | default(inventory_hostname) }}"
+    port: "{{ ansible_port | default(22) }}"
+    timeout: 10
+  delegate_to: localhost
+  become: false

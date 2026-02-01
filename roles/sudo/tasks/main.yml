@@ -1,0 +1,9 @@
+---
+- name: Ensure sudo is installed (Debian/Proxmox)
+  ansible.builtin.apt:
+    name: sudo
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+  become: false  # ak si pripojená ako root, netreba sudo
+  tags: [bootstrap]

@@ -5,7 +5,6 @@
     state: directory
     mode: "0700"
   delegate_to: workstation
-  run_once: false
 
 - name: Generate ed25519 keypair on control node if missing
   community.crypto.openssh_keypair:
