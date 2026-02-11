@@ -1,0 +1,6 @@
+---
+ensure_dir_owner: "root"
+ensure_dir_group: "root"
+ensure_dir_mode: "0755"
+ensure_dir_recursive: true
+ensure_dir_fail_on_symlink: true

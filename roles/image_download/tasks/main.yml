@@ -1,0 +1,58 @@
+---
+- name: Ensure download directory exists
+  ansible.builtin.file:
+    path: "{{ cloud_image_download_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ensure curl is installed
+  ansible.builtin.apt:
+    name: [curl, ca-certificates, coreutils]
+    state: present
+    update_cache: true
+
+- name: Download SHA512SUMS (curl, no python urllib)
+  ansible.builtin.command:
+    cmd: "curl -fsSL {{ debian_cloud_checksum_url }} -o /tmp/SHA512SUMS"
+  changed_when: false
+
+- name: Extract expected sha512 for image
+  ansible.builtin.shell: |
+    set -euo pipefail
+    awk '$NF=="{{ debian_cloud_image_name }}" || $NF=="*{{ debian_cloud_image_name }}" {print $1; exit}' /tmp/SHA512SUMS
+  args:
+    executable: /bin/bash
+  register: _sha_expected
+  changed_when: false
+
+- name: Fail if checksum not found
+  ansible.builtin.fail:
+    msg: "Checksum for {{ debian_cloud_image_name }} not found in {{ debian_cloud_checksum_url }}"
+  when: _sha_expected.stdout | length == 0
+
+- name: Stat local image
+  ansible.builtin.stat:
+    path: "{{ cloud_image_local_path }}"
+  register: _img_stat
+
+- name: Download Debian cloud image (curl)
+  ansible.builtin.command:
+    cmd: "curl -fL --retry 5 --retry-delay 2 {{ debian_cloud_image_url }} -o {{ cloud_image_local_path }}"
+  when: cloud_image_force_download | bool or not _img_stat.stat.exists
+
+- name: Verify sha512 (sha512sum)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    echo "{{ _sha_expected.stdout }}  {{ cloud_image_local_path }}" | sha512sum -c -
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Report image ready
+  ansible.builtin.debug:
+    msg:
+      - "Image: {{ cloud_image_local_path }}"
+      - "Source: {{ debian_cloud_image_url }}"
+      - "SHA512: {{ _sha_expected.stdout }}"

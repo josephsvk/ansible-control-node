@@ -1,0 +1,94 @@
+---
+# ===== Debian stable cloud image selection =====
+debian_release: "12"
+debian_codename: "bookworm"
+debian_arch: "amd64"
+cloud_image_format: "qcow2"
+cloud_image_type: "generic"
+
+# Base URL (official Debian cloud images)
+debian_cloud_image_base_url: "https://cloud.debian.org/images/cloud"
+
+# Remote paths
+debian_cloud_image_remote_dir: "{{ debian_cloud_image_base_url }}/{{ debian_codename }}/latest"
+debian_cloud_image_name: "debian-{{ debian_release }}-{{ cloud_image_type }}-{{ debian_arch }}.{{ cloud_image_format }}"
+debian_cloud_image_url: "{{ debian_cloud_image_remote_dir }}/{{ debian_cloud_image_name }}"
+
+# Checksums
+debian_cloud_checksum_url: "{{ debian_cloud_image_remote_dir }}/SHA512SUMS"
+debian_cloud_checksum_algo: "sha512"
+
+# Local storage on Proxmox node
+cloud_image_download_dir: "/var/lib/vz/template/qcow2"
+cloud_image_local_path: "{{ cloud_image_download_dir }}/{{ debian_cloud_image_name }}"
+
+# Behavior
+cloud_image_force_download: false   # true = always re-download even if file exists
+
+# ===== virt-customize stage =====
+cloud_image_customized_suffix: "-golden-v1"
+cloud_image_customized_path: >-
+  {{ cloud_image_local_path | regex_replace('\\.' ~ cloud_image_format ~ '$',
+  cloud_image_customized_suffix ~ '.' ~ cloud_image_format) }}
+
+virt_customize_packages:
+  - qemu-guest-agent
+  - sudo
+  - ca-certificates
+  - curl
+  - vim
+  - htop
+
+virt_customize_remove_packages: []
+
+virt_customize_enable_services:
+  - qemu-guest-agent
+
+virt_customize_disable_services: []
+
+# Cloud-init neutrality: nechaj, ale odstráň host-identity artefakty
+virt_customize_truncate_machine_id: true
+virt_customize_clean_cloud_init: true
+virt_customize_clean_logs: true
+
+# Safety
+virt_customize_force_rebuild: false
+
+# ===== Proxmox VM template build (step3) =====
+pve_node: "pve"                 # názov node v PVE (qm nepotrebuje, ale nech je jasné)
+pve_template_vmid: 9001         # VMID pre golden image (nepoužívaj existujúcu 116)
+pve_template_name: "debian12-golden-v1"
+
+pve_storage_images: "VM"        # storage pre disky (images)
+pve_storage_snippets: "VM"      # ak budeš neskôr dávať snippets
+pve_bridge: "vmbr0"
+
+pve_memory_mb: 4096
+pve_cores: 4
+pve_sockets: 1
+
+pve_machine: "q35"
+pve_bios: "ovmf"
+pve_scsi_controller: "virtio-scsi-pci"
+
+# Disk import
+pve_disk_format: "raw"          # PVE pri importdisk často skončí v raw na storage typu directory/NFS
+pve_disk_size_gb: 16            # finálne zväčšenie disku po importe (voliteľné)
+
+# Cloud-init
+pve_ci_storage: "{{ pve_storage_images }}"
+pve_ci_user: "ansible"
+pve_ci_sshkeys_file: "/home/ansible/.ssh/authorized_keys"   # na PVE node, nie na control node
+
+# Network
+pve_net_model: "virtio"
+pve_net_vlan: ""                # napr. "tag=20" ak chceš, inak prázdne
+
+# ===== Step4 test clone =====
+pve_test_vmid: 9011
+pve_test_name: "debian12-testclone-v1"
+
+# cloud-init pre test VM
+pve_test_ipconfig0: "ip=dhcp"
+pve_test_ciuser: "ansible"
+pve_test_sshkeys_file: "{{ pve_ci_sshkeys_file }}"

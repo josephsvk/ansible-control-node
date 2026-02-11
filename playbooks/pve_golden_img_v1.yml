@@ -1,0 +1,18 @@
+---
+- name: Proxmox golden image v1
+  hosts: pve
+  become: true
+  gather_facts: false
+
+  roles:
+    - role: image_download
+      tags: ["step1", "download"]
+    
+    - role: image_virt_customize
+      tags: ["step2", "customize"]
+
+    - role: pve_qm_import_template
+      tags: ["step3", "qm"]
+
+    - role: pve_qm_test_clone
+      tags: ["step4", "testclone"]

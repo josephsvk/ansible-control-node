@@ -1,0 +1,6 @@
+vmid: 9021
+pve_target_node: pve
+vm_name: deb12-test
+vm_domain: local
+vm_fqdn: "{{ vm_name }}.{{ vm_domain }}"
+

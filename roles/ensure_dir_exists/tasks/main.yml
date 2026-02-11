@@ -1,0 +1,69 @@
+---
+- name: Validate required var ensure_dir_path
+  ansible.builtin.fail:
+    msg: "ensure_dir_path is not defined"
+  when: ensure_dir_path is not defined or ensure_dir_path | length == 0
+
+- name: Stat target path
+  ansible.builtin.stat:
+    path: "{{ ensure_dir_path }}"
+    follow: false
+  register: _dir_stat
+
+- name: Fail if path exists and is a symlink
+  ansible.builtin.fail:
+    msg: >-
+      Path {{ ensure_dir_path }} exists but is a symlink.
+      Refusing to operate to avoid unexpected filesystem writes.
+  when:
+    - ensure_dir_fail_on_symlink | bool
+    - _dir_stat.stat.exists
+    - _dir_stat.stat.islnk | default(false)
+
+- name: Fail if path exists and is not a directory
+  ansible.builtin.fail:
+    msg: >-
+      Path {{ ensure_dir_path }} exists but is not a directory.
+      Detected type: {{ _dir_stat.stat.ftype | default('unknown') }}.
+  when:
+    - _dir_stat.stat.exists
+    - not _dir_stat.stat.isdir | default(false)
+
+- name: Create directory if missing
+  ansible.builtin.file:
+    path: "{{ ensure_dir_path }}"
+    state: directory
+    owner: "{{ ensure_dir_owner }}"
+    group: "{{ ensure_dir_group }}"
+    mode: "{{ ensure_dir_mode }}"
+    recurse: "{{ ensure_dir_recursive | bool }}"
+  register: _mkdir
+  when: not _dir_stat.stat.exists
+
+- name: Fail with clear reason if creation failed
+  ansible.builtin.fail:
+    msg: >-
+      Failed to create directory {{ ensure_dir_path }}.
+      Likely reasons:
+      - insufficient permissions
+      - parent path missing or read-only
+      - filesystem mounted read-only
+      - SELinux/AppArmor restriction
+      Task result: {{ _mkdir }}
+  when:
+    - not _dir_stat.stat.exists
+    - _mkdir is failed
+
+- name: Ensure ownership and mode if directory already exists
+  ansible.builtin.file:
+    path: "{{ ensure_dir_path }}"
+    owner: "{{ ensure_dir_owner }}"
+    group: "{{ ensure_dir_group }}"
+    mode: "{{ ensure_dir_mode }}"
+  when: _dir_stat.stat.exists
+
+- name: Report directory ensured
+  ansible.builtin.debug:
+    msg:
+      - "Directory ensured: {{ ensure_dir_path }}"
+      - "Owner: {{ ensure_dir_owner }} Group: {{ ensure_dir_group }} Mode: {{ ensure_dir_mode }}"

@@ -1,0 +1,77 @@
+---
+- name: Ensure libguestfs tools present (virt-customize) - do not touch qemu/proxmox packages
+  ansible.builtin.apt:
+    name:
+      - libguestfs-tools
+    state: present
+    update_cache: true
+    install_recommends: false
+
+- name: Decide whether to rebuild customized image
+  ansible.builtin.stat:
+    path: "{{ cloud_image_customized_path }}"
+  register: _custom_stat
+
+- name: Copy base image to customized path (preserve base)
+  ansible.builtin.command:
+    cmd: "cp --reflink=auto {{ cloud_image_local_path }} {{ cloud_image_customized_path }}"
+  when: virt_customize_force_rebuild | bool or not _custom_stat.stat.exists
+
+- name: virt-customize install packages
+  ansible.builtin.command:
+    cmd: >
+      virt-customize -a {{ cloud_image_customized_path }}
+      --install {{ virt_customize_packages | join(',') }}
+  when: (virt_customize_packages | length) > 0 and (virt_customize_force_rebuild | bool or not _custom_stat.stat.exists)
+
+- name: virt-customize remove packages
+  ansible.builtin.command:
+    cmd: >
+      virt-customize -a {{ cloud_image_customized_path }}
+      --uninstall {{ virt_customize_remove_packages | join(',') }}
+  when: (virt_customize_remove_packages | length) > 0 and (virt_customize_force_rebuild | bool or not _custom_stat.stat.exists)
+
+- name: Enable requested services
+  ansible.builtin.shell: |
+    set -euo pipefail
+    virt-customize -a {{ cloud_image_customized_path }} \
+      {% for s in virt_customize_enable_services %} --run-command 'systemctl enable {{ s }}' {% endfor %}
+  args:
+    executable: /bin/bash
+  when: (virt_customize_enable_services | length) > 0 and (virt_customize_force_rebuild | bool or not _custom_stat.stat.exists)
+
+- name: Disable requested services
+  ansible.builtin.shell: |
+    set -euo pipefail
+    virt-customize -a {{ cloud_image_customized_path }} \
+      {% for s in virt_customize_disable_services %} --run-command 'systemctl disable {{ s }}' {% endfor %}
+  args:
+    executable: /bin/bash
+  when: (virt_customize_disable_services | length) > 0 and (virt_customize_force_rebuild | bool or not _custom_stat.stat.exists)
+
+- name: Truncate machine-id (neutral template)
+  ansible.builtin.command:
+    cmd: "virt-customize -a {{ cloud_image_customized_path }} --truncate /etc/machine-id"
+  when: virt_customize_truncate_machine_id | bool and (virt_customize_force_rebuild | bool or not _custom_stat.stat.exists)
+
+- name: Clean cloud-init state (avoid carrying instance-id)
+  ansible.builtin.command:
+    cmd: "virt-customize -a {{ cloud_image_customized_path }} --run-command 'cloud-init clean --logs || true'"
+  when: virt_customize_clean_cloud_init | bool and (virt_customize_force_rebuild | bool or not _custom_stat.stat.exists)
+
+- name: Clean logs + temp
+  ansible.builtin.shell: |
+    set -euo pipefail
+    virt-customize -a {{ cloud_image_customized_path }} \
+      --run-command 'rm -rf /var/log/* /tmp/* /var/tmp/* || true' \
+      --run-command 'find /var/log -type f -name "*.log" -delete || true'
+  args:
+    executable: /bin/bash
+  when: virt_customize_clean_logs | bool and (virt_customize_force_rebuild | bool or not _custom_stat.stat.exists)
+
+- name: Report customized image ready
+  ansible.builtin.debug:
+    msg:
+      - "Customized image: {{ cloud_image_customized_path }}"
+      - "Base image: {{ cloud_image_local_path }}"
+      - "Packages: {{ virt_customize_packages }}"

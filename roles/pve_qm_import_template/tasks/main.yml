@@ -1,0 +1,121 @@
+---
+- name: Check if VM exists
+  ansible.builtin.command: "qm status {{ pve_template_vmid }}"
+  register: _vm_status
+  changed_when: false
+  failed_when: false
+
+- name: Create VM shell (no disk yet)
+  ansible.builtin.command: >
+    qm create {{ pve_template_vmid }}
+    --name {{ pve_template_name }}
+    --memory {{ pve_memory_mb }}
+    --cores {{ pve_cores }}
+    --sockets {{ pve_sockets }}
+    --machine {{ pve_machine }}
+    --bios {{ pve_bios }}
+    --scsihw {{ pve_scsi_controller }}
+    --agent 1
+    --serial0 socket
+  when: _vm_status.rc != 0
+
+# UEFI needs an EFI disk on many installs; Proxmox UI často pridá efidisk0 automaticky až pri editovaní.
+# Tu to nastavíme explicitne. Pre directory/NFS storages funguje "efidisk0 <storage>:0".
+- name: Ensure EFI disk exists (OVMF)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if ! qm config {{ pve_template_vmid }} | grep -q '^efidisk0:'; then
+      qm set {{ pve_template_vmid }} --efidisk0 {{ pve_storage_images }}:0,pre-enrolled-keys=1
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Import customized qcow2 into storage (creates unused disk)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if ! qm config {{ pve_template_vmid }} | grep -q '^scsi0:'; then
+      qm importdisk {{ pve_template_vmid }} {{ cloud_image_customized_path }} {{ pve_storage_images }} --format {{ pve_disk_format }}
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Attach imported disk as scsi0 (move from unused)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if ! qm config {{ pve_template_vmid }} | grep -q '^scsi0:'; then
+      DISK_REF="$(qm config {{ pve_template_vmid }} | awk -F': ' '/^unused0:/{print $2; exit}')"
+      test -n "$DISK_REF"
+      qm set {{ pve_template_vmid }} --scsi0 "$DISK_REF"
+      qm set {{ pve_template_vmid }} --boot order=scsi0
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Ensure cloud-init drive (ide2)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if ! qm config {{ pve_template_vmid }} | grep -q '^ide2:.*cloudinit'; then
+      qm set {{ pve_template_vmid }} --ide2 {{ pve_ci_storage }}:cloudinit
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Ensure network device net0 (virtio on vmbr0)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if ! qm config {{ pve_template_vmid }} | grep -q '^net0:'; then
+      if [ -n "{{ pve_net_vlan | trim }}" ]; then
+        qm set {{ pve_template_vmid }} --net0 {{ pve_net_model }},bridge={{ pve_bridge }},{{ pve_net_vlan }}
+      else
+        qm set {{ pve_template_vmid }} --net0 {{ pve_net_model }},bridge={{ pve_bridge }}
+      fi
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Cloud-init defaults (user + ssh keys if file exists on PVE)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if [ -f "{{ pve_ci_sshkeys_file }}" ]; then
+      qm set {{ pve_template_vmid }} --ciuser {{ pve_ci_user }} --sshkeys {{ pve_ci_sshkeys_file }}
+    else
+      qm set {{ pve_template_vmid }} --ciuser {{ pve_ci_user }}
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Optional resize disk (if configured)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if [ -n "{{ pve_disk_size_gb | string | trim }}" ]; then
+      # zväčší len ak je disk menší; qm resize je bezpečný opakovaný
+      qm resize {{ pve_template_vmid }} scsi0 {{ pve_disk_size_gb }}G || true
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Convert to template
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if ! qm config {{ pve_template_vmid }} | grep -q '^template:'; then
+      qm template {{ pve_template_vmid }}
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Show resulting config
+  ansible.builtin.command: "qm config {{ pve_template_vmid }}"
+  changed_when: false
+  register: _qm_config
+
+- name: Report
+  ansible.builtin.debug:
+    msg: "{{ _qm_config.stdout_lines }}"

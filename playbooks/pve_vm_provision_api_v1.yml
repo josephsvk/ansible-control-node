@@ -1,0 +1,12 @@
+---
+- name: Provision VM(s) from template via Proxmox API
+  hosts: pve_vms
+  gather_facts: false
+  connection: local
+
+  vars:
+    ansible_python_interpreter: "{{ playbook_dir }}/../.venv/bin/python"
+    
+  roles:
+    - role: pve_clone_api
+      tags: ["clone_api"]

@@ -1,0 +1,50 @@
+---
+- name: Check if test VM exists
+  ansible.builtin.command: "qm status {{ pve_test_vmid }}"
+  register: _tstat
+  changed_when: false
+  failed_when: false
+
+- name: Clone from template (full clone)
+  ansible.builtin.command: >
+    qm clone {{ pve_template_vmid }} {{ pve_test_vmid }}
+    --name {{ pve_test_name }}
+    --full 1
+  when: _tstat.rc != 0
+
+- name: Set cloud-init identity (hostname/FQDN) + DHCP
+  ansible.builtin.shell: |
+    set -euo pipefail
+    qm set {{ vmid }} \
+      --name {{ vm_name }} \
+      --ciuser ansible \
+      --ipconfig0 ip=dhcp \
+      --hostname {{ vm_name }} \
+      --searchdomain {{ vm_domain }}
+  args:
+    executable: /bin/bash
+  changed_when: true
+  
+- name: Apply cloud-init settings to test VM
+  ansible.builtin.shell: |
+    set -euo pipefail
+    qm set {{ pve_test_vmid }} --ciuser {{ pve_test_ciuser }} --ipconfig0 {{ pve_test_ipconfig0 }}
+    if [ -f "{{ pve_test_sshkeys_file }}" ]; then
+      qm set {{ pve_test_vmid }} --sshkeys {{ pve_test_sshkeys_file }}
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Start test VM
+  ansible.builtin.command: "qm start {{ pve_test_vmid }}"
+  changed_when: true
+
+- name: Show test VM config
+  ansible.builtin.command: "qm config {{ pve_test_vmid }}"
+  changed_when: false
+  register: _cfg
+
+- name: Report
+  ansible.builtin.debug:
+    msg: "{{ _cfg.stdout_lines }}"

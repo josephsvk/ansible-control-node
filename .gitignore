@@ -23,3 +23,7 @@ tmp/
 # enviromentalne prostrenie
 .venv/
 collections/ansible_collections
+
+#dodatky z netu 
+roles/geerlingguy.ntp
+roles/lae.proxmox
