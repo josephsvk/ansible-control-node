@@ -1,8 +1,0 @@
-ufw_enabled: true
-
-ufw_allow_ssh: true
-ufw_ssh_port: 22
-
-ufw_allow_http: false
-ufw_allow_https: false
-ufw_allow_wg: false

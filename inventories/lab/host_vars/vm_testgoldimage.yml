@@ -1,4 +1,15 @@
----
+pve_node: pve
+vmid: 2101
+vm_name: testgoldimage
+vm_type: instance
+os_family: debian
+
+clone_from_template_vmid: 1101
+
+pve_bridge: vmbr0
+
+ssh_host: testgoldimage
+
 # ===== Debian stable cloud image selection =====
 debian_release: "12"
 debian_codename: "bookworm"
@@ -55,13 +66,10 @@ virt_customize_clean_logs: true
 virt_customize_force_rebuild: false
 
 # ===== Proxmox VM template build (step3) =====
-pve_node: "pve"                 # názov node v PVE (qm nepotrebuje, ale nech je jasné)
 pve_template_vmid: 9001         # VMID pre golden image (nepoužívaj existujúcu 116)
 pve_template_name: "debian12-golden-v1"
 
-pve_storage_images: "VM"        # storage pre disky (images)
 pve_storage_snippets: "VM"      # ak budeš neskôr dávať snippets
-pve_bridge: "vmbr0"
 
 pve_memory_mb: 4096
 pve_cores: 4

@@ -1,0 +1,24 @@
+haos_template_vmid: 1001
+
+haos_storage: "VM"
+haos_storage_interface: "sata0"
+haos_bridge: "vmbr0"
+
+haos_machine: "q35"
+haos_bios: "ovmf"
+haos_scsihw: "virtio-scsi-single"
+
+haos_cores: 4
+haos_sockets: 1
+haos_memory_mb: 4096
+
+haos_disk_size_gb: 64
+
+haos_version: "17.0"
+haos_variant: "ova"
+haos_image_dir: "/var/lib/vz/template/qcow2"
+
+haos_image_local_path: "{{ haos_image_dir }}/haos_{{ haos_variant }}-{{ haos_version }}.qcow2"
+haos_template_name: "haos-{{ haos_version }}-template"
+
+ansible_python_interpreter: /home/joseph/infra/ansible/.venv/bin/python

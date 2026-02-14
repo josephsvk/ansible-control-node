@@ -1,0 +1,197 @@
+---
+- name: Validate required vars
+  ansible.builtin.assert:
+    that:
+      - haos_api_releases_url is defined
+      - haos_image_download_dir is defined
+      - pve_api_host is defined
+      - pve_api_user is defined
+      - pve_api_token_id is defined
+      - pve_api_token_secret is defined
+      - pve_vmid is defined
+      - pve_name is defined
+      - pve_target_node is defined
+      - pve_storage_images is defined
+      - pve_storage_interface is defined
+      - pve_bridge is defined
+
+- name: Install packages required on PVE node
+  ansible.builtin.apt:
+    name:
+      - python3-proxmoxer
+      - python3-requests
+      - xz-utils
+      - curl
+      - ca-certificates
+    state: present
+    update_cache: true
+
+- name: Create temporary directory
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: haos_download
+  register: haos_tempdir
+
+- name: Get release list from Home Assistant repository
+  ansible.builtin.uri:
+    url: "{{ haos_api_releases_url }}"
+    return_content: true
+    headers:
+      Accept: "application/vnd.github+json"
+  register: haos_releases
+
+- name: Pick latest stable release
+  ansible.builtin.set_fact:
+    _haos_latest_release: "{{ (haos_releases.json | json_query('[?prerelease==`false`] | [0]')) }}"
+
+- name: Pick matching asset
+  ansible.builtin.set_fact:
+    haos_release_asset: >-
+      {{
+        (
+          _haos_latest_release.assets
+          | selectattr('name','search', haos_asset_must_contain[0])
+          | selectattr('name','search', haos_asset_must_contain[1])
+          | selectattr('name','search', haos_asset_must_end | regex_escape)
+          | list
+        )[0]
+      }}
+
+- name: Set filenames
+  ansible.builtin.set_fact:
+    haos_archive_name: "{{ haos_release_asset.name }}"
+    haos_archive_path: "{{ haos_tempdir.path }}/{{ haos_release_asset.name }}"
+    haos_qcow2_name: "{{ haos_release_asset.name | regex_replace('\\.xz$', '') }}"
+    haos_qcow2_path_tmp: "{{ haos_tempdir.path }}/{{ haos_release_asset.name | regex_replace('\\.xz$', '') }}"
+    haos_qcow2_path_final: "{{ haos_image_download_dir }}/{{ haos_release_asset.name | regex_replace('\\.xz$', '') }}"
+
+- name: Download Home Assistant disk image (xz)
+  ansible.builtin.get_url:
+    url: "{{ haos_release_asset.browser_download_url }}"
+    dest: "{{ haos_archive_path }}"
+    mode: "0644"
+    force: "{{ haos_force_rebuild | bool }}"
+  register: _dl
+
+- name: Unarchive downloaded image (unxz)
+  ansible.builtin.command:
+    cmd: "unxz -f {{ haos_archive_path }}"
+  when: haos_force_rebuild | bool or _dl.changed
+  changed_when: true
+
+- name: Move qcow2 to final cache dir (atomic)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    install -d -m 0755 "{{ haos_image_download_dir }}"
+    mv -f "{{ haos_qcow2_path_tmp }}" "{{ haos_qcow2_path_final }}"
+  args:
+    executable: /bin/bash
+  when: haos_force_rebuild | bool or _dl.changed
+  changed_when: true
+
+- name: Build net0 string
+  ansible.builtin.set_fact:
+    _haos_net0: >-
+      {{
+        (pve_mac | default('') | length > 0)
+        | ternary('virtio=' ~ pve_mac ~ ',bridge=' ~ pve_bridge, 'virtio,bridge=' ~ pve_bridge)
+      }}
+
+- name: Create VM shell (API)
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ pve_api_host }}"
+    api_user: "{{ pve_api_user }}"
+    api_token_id: "{{ pve_api_token_id }}"
+    api_token_secret: "{{ pve_api_token_secret }}"
+    validate_certs: "{{ pve_api_validate_certs | bool }}"
+    node: "{{ pve_target_node }}"
+    vmid: "{{ pve_vmid | int }}"
+    name: "{{ pve_name }}"
+    description: "{{ pve_description | default('Home Assistant') }}"
+    ostype: l26
+    machine: "{{ pve_machine | default('q35') }}"
+    bios: "{{ pve_bios | default('ovmf') }}"
+    cores: "{{ pve_cores | int }}"
+    sockets: "{{ pve_sockets | int }}"
+    memory: "{{ pve_memory_mb | int }}"
+    scsihw: "{{ pve_scsihw | default('virtio-scsi-single') }}"
+    agent: true
+    onboot: "{{ pve_onboot | default(true) | bool }}"
+    protection: "{{ pve_protection | default(true) | bool }}"
+    localtime: true
+    net:
+      net0: "{{ _haos_net0 }}"
+    efidisk0:
+      storage: "{{ pve_storage_images }}"
+      format: raw
+      efitype: 4m
+      pre_enrolled_keys: false
+    state: present
+
+- name: Get storage info
+  community.general.proxmox_storage_info:
+    api_host: "{{ pve_api_host }}"
+    api_user: "{{ pve_api_user }}"
+    api_token_id: "{{ pve_api_token_id }}"
+    api_token_secret: "{{ pve_api_token_secret }}"
+    validate_certs: "{{ pve_api_validate_certs | bool }}"
+    storage: "{{ pve_storage_images }}"
+  register: haos_storage_info
+
+- name: Determine storage type
+  ansible.builtin.set_fact:
+    haos_storage_type: "{{ haos_storage_info.proxmox_storages[0].type }}"
+
+- name: Import disk command depends on storage type
+  ansible.builtin.set_fact:
+    haos_importdisk_cmd: >-
+      {{
+        (haos_storage_type in ['zfspool','lvmthin'])
+        | ternary(
+            'qm importdisk ' ~ (pve_vmid|int) ~ ' ' ~ haos_qcow2_path_final ~ ' ' ~ pve_storage_images,
+            'qm importdisk ' ~ (pve_vmid|int) ~ ' ' ~ haos_qcow2_path_final ~ ' ' ~ pve_storage_images ~ ' -format qcow2'
+          )
+      }}
+
+- name: Import downloaded image (qm importdisk)
+  ansible.builtin.command:
+    cmd: "{{ haos_importdisk_cmd }}"
+  changed_when: true
+
+- name: Set disk path depends on storage type
+  ansible.builtin.set_fact:
+    haos_setdisk_cmd: >-
+      {{
+        (haos_storage_type in ['zfspool','lvmthin'])
+        | ternary(
+            'qm set ' ~ (pve_vmid|int) ~ ' --' ~ pve_storage_interface ~ ' ' ~ pve_storage_images ~ ':vm-' ~ (pve_vmid|int) ~ '-disk-1',
+            'qm set ' ~ (pve_vmid|int) ~ ' --' ~ pve_storage_interface ~ ' ' ~ pve_storage_images ~ ':' ~ (pve_vmid|int) ~ '/vm-' ~ (pve_vmid|int) ~ '-disk-1.qcow2'
+          )
+      }}
+
+- name: Attach imported disk (qm set)
+  ansible.builtin.command:
+    cmd: "{{ haos_setdisk_cmd }}"
+  changed_when: true
+
+- name: Set boot order
+  ansible.builtin.command:
+    cmd: "qm set {{ pve_vmid | int }} --boot order={{ pve_storage_interface }}"
+  changed_when: true
+
+- name: Start VM (API)
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ pve_api_host }}"
+    api_user: "{{ pve_api_user }}"
+    api_token_id: "{{ pve_api_token_id }}"
+    api_token_secret: "{{ pve_api_token_secret }}"
+    validate_certs: "{{ pve_api_validate_certs | bool }}"
+    node: "{{ pve_target_node }}"
+    vmid: "{{ pve_vmid | int }}"
+    state: started
+    timeout: 300
+
+- name: Cleanup tmp dir
+  ansible.builtin.file:
+    path: "{{ haos_tempdir.path }}"
+    state: absent

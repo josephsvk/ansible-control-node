@@ -1,0 +1,10 @@
+ansible_host: 192.168.1.10
+ansible_user: ansible
+ansible_port: 22
+
+pve_node_name: pve
+pve_default_storage: local-zfs
+pve_default_bridge: vmbr0
+
+pve_storage_images: local-zfs
+pve_storage_snippets: VM

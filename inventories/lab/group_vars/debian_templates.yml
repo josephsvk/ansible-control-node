@@ -1,0 +1,3 @@
+debian_defaults:
+  os_family: debian
+  cloudinit: true

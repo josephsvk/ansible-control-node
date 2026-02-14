@@ -1,0 +1,106 @@
+---
+haos_defaults:
+  os_family: haos
+
+# GitHub API pre release list
+haos_api_releases_url: "https://api.github.com/repos/home-assistant/operating-system/releases"
+
+# vyber asset (default: latest stable, qcow2 + ova, .xz)
+haos_asset_must_contain:
+  - "qcow2"
+  - "ova"
+haos_asset_must_end: ".xz"
+
+# kde sa ukladá výsledný qcow2 na PVE node (po rozbalení)
+haos_image_download_dir: "/var/lib/vz/template/qcow2"
+
+# keď true: vždy stiahne a reimportne
+haos_force_rebuild: false
+
+haos_template_vmid: 1001
+
+haos_bridge: "vmbr0"
+
+haos_machine: "q35"
+haos_bios: "ovmf"
+haos_scsihw: "virtio-scsi-single"
+
+haos_cores: 4
+haos_sockets: 1
+haos_memory_mb: 4096
+
+haos_disk_size_gb: 64
+
+haos_image_dir: "/var/lib/vz/template/qcow2"
+
+haos_image_local_path: "{{ haos_image_dir }}/haos_{{ haos_variant }}-{{ haos_version }}.qcow2"
+haos_template_name: "haos-{{ haos_version }}-template"
+
+# ===== Home Assistant OS (HAOS) image selection =====
+# Zdroj: GitHub releases home-assistant/operating-system (QCOW2 pre Proxmox/KVM je "haos_ova-<ver>.qcow2.xz")
+haos_version: "17.0"            # nastav na verziu ktorú chceš (podľa releases)
+haos_variant: "ova"             # pre Proxmox/KVM sa používa haos_ova
+haos_compression: "xz"
+cloud_image_format: "qcow2"
+
+# Base URL (official HAOS releases)
+haos_base_url: "https://github.com/home-assistant/operating-system/releases/download"
+
+# Remote paths
+haos_remote_dir: "{{ haos_base_url }}/{{ haos_version }}"
+haos_image_name: "haos_{{ haos_variant }}-{{ haos_version }}.{{ cloud_image_format }}"
+haos_image_archive_name: "{{ haos_image_name }}.{{ haos_compression }}"
+haos_image_url: "{{ haos_remote_dir }}/{{ haos_image_archive_name }}"
+
+# Local storage on Proxmox node
+cloud_image_download_dir: "/var/lib/vz/template/qcow2"
+haos_image_archive_local_path: "{{ cloud_image_download_dir }}/{{ haos_image_archive_name }}"
+cloud_image_local_path: "{{ cloud_image_download_dir }}/{{ haos_image_name }}"   # po rozbalení
+
+# Behavior
+cloud_image_force_download: false   # true = vždy stiahnuť nanovo
+
+# ===== virt-customize stage (HAOS sa necustimizuje) =====
+virt_customize_enabled: false
+virt_customize_packages: []
+virt_customize_remove_packages: []
+virt_customize_enable_services: []
+virt_customize_disable_services: []
+virt_customize_truncate_machine_id: false
+virt_customize_clean_cloud_init: false
+virt_customize_clean_logs: false
+virt_customize_force_rebuild: false
+
+# ===== Proxmox VM template build =====
+pve_node: "pve"
+pve_template_vmid: 1001
+pve_template_name: "haos-{{ haos_version }}-template-v1"
+
+pve_bridge: "vmbr0"
+
+pve_memory_mb: 4096
+pve_cores: 4
+pve_sockets: 1
+
+# HAOS vyžaduje UEFI => OVMF
+pve_machine: "q35"
+pve_bios: "ovmf"
+pve_scsi_controller: "virtio-scsi-pci"
+
+# Disk import
+pve_disk_format: "raw"
+pve_disk_size_gb: 64            # odporúčané zväčšiť (HA + add-ons)++
+
+# QEMU guest agent (zapína sa na úrovni VM v Proxmox-e, nie v image)
+pve_qemu_agent: true
+
+# Cloud-init (HAOS nepoužíva) => vypnúť/ignorovať
+pve_ci_enabled: false
+pve_ci_storage: ""
+pve_ci_user: ""
+pve_ci_sshkeys_file: ""
+
+# Network
+pve_net_model: "virtio"
+pve_net_vlan: ""                # napr. "tag=20" alebo prázdne
+

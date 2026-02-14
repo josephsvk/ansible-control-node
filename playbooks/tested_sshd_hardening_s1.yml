@@ -1,6 +1,6 @@
 ---
 - name: Bootstrap access and ansible user
-  hosts: pve1
+  hosts: pve
   become: true
   become_method: su
   become_user: ansible

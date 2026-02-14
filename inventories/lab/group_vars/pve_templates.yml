@@ -1,0 +1,8 @@
+template_defaults:
+  vm_machine: q35
+  vm_bios: ovmf
+  vm_scsihw: virtio-scsi-single
+  vm_agent: 1
+  vm_serial0: socket
+  vm_memory: 4096
+  vm_cores: 4

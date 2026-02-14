@@ -1,6 +1,6 @@
 ---
 - name: Proxmox golden image v1
-  hosts: pve
+  hosts: pve_nodes
   become: true
   gather_facts: false
 
@@ -14,5 +14,3 @@
     - role: pve_qm_import_template
       tags: ["step3", "qm"]
 
-    - role: pve_qm_test_clone
-      tags: ["step4", "testclone"]

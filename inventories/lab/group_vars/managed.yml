@@ -1,6 +1,30 @@
-ansible_user: ansible
-ansible_port: 22
-ansible_ssh_private_key_file: "/home/joseph/.ssh/vps-hetz-1_ansible_ed25519"
-ansible_become: true
-ansible_become_method: sudo
-ansible_become_user: root
+ufw_enabled: true
+ufw_ssh_port: 22
+ufw_allow_ssh: true
+ufw_allow_http: false
+ufw_allow_https: false
+ufw_allow_wg: false
+
+ufw_bundles:
+  base:
+    - { rule: allow, port: "22", proto: tcp, comment: ssh }
+  web:
+    - { rule: allow, port: "80", proto: tcp, comment: http }
+    - { rule: allow, port: "443", proto: tcp, comment: https }
+  wireguard:
+    - { rule: allow, port: "51820", proto: udp, comment: wg }
+
+users_manage:
+  - name: ansible
+    uid: 1100
+    groups: [sudo]
+    shell: /bin/bash
+    create_home: true
+    sudo_nopasswd: true
+
+  - name: joseph
+    uid: 1000
+    groups: [sudo]
+    shell: /bin/bash
+    create_home: true
+    sudo_nopasswd: false

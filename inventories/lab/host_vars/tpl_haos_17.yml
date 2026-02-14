@@ -1,0 +1,20 @@
+pve_node: pve
+vmid: 1001
+vm_name: haos-17.0-template
+vm_type: template
+os_family: haos
+
+vm_memory: 4096
+vm_cores: 4
+vm_machine: q35
+vm_bios: ovmf
+vm_scsihw: virtio-scsi-single
+vm_agent: 1
+vm_serial0: socket
+
+
+
+haos_version: "17.0"
+haos_image_url: "https://github.com/home-assistant/operating-system/releases/download/17.0/haos_ova-17.0.qcow2.xz"
+haos_archive_local_path: "/home/joseph/images/haos_ova-17.0.qcow2.xz"
+haos_qcow2_local_path: "/home/joseph/images/haos_ova-17.0.qcow2"

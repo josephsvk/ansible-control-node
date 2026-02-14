@@ -1,0 +1,48 @@
+---
+- name: Ensure download directory exists
+  ansible.builtin.file:
+    path: "{{ cloud_image_download_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ensure required tools are installed
+  ansible.builtin.apt:
+    name:
+      - curl
+      - ca-certificates
+      - xz-utils
+    state: present
+    update_cache: true
+
+- name: Stat final image
+  ansible.builtin.stat:
+    path: "{{ haos_image_local_path }}"
+  register: _img_stat
+
+- name: Stat archive
+  ansible.builtin.stat:
+    path: "{{ haos_archive_local_path }}"
+  register: _arc_stat
+
+- name: Download HAOS archive (qcow2.xz)
+  ansible.builtin.command:
+    cmd: "curl -fL --retry 5 --retry-delay 2 {{ haos_url }} -o {{ haos_archive_local_path }}"
+  when: cloud_image_force_download | bool or not _arc_stat.stat.exists
+
+- name: Extract archive to qcow2
+  ansible.builtin.shell: |
+    set -euo pipefail
+    xz -dc "{{ haos_archive_local_path }}" > "{{ haos_image_local_path }}.tmp"
+    mv -f "{{ haos_image_local_path }}.tmp" "{{ haos_image_local_path }}"
+  args:
+    executable: /bin/bash
+  when: cloud_image_force_download | bool or not _img_stat.stat.exists
+
+- name: Report image ready
+  ansible.builtin.debug:
+    msg:
+      - "HAOS image: {{ haos_image_local_path }}"
+      - "Source: {{ haos_url }}"
+      - "Archive: {{ haos_archive_local_path }}"

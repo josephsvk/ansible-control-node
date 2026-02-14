@@ -1,0 +1,12 @@
+pve_node: pve
+vmid: 2001
+vm_name: homeassistant-duko
+vm_type: instance
+os_family: haos
+
+clone_from_template_vmid: 1001
+
+pve_bridge: vmbr0
+
+# keď po deployi dostane IP, toto je link na reálny SSH host
+ssh_host: homeassistant_duko

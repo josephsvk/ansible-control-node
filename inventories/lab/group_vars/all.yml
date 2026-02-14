@@ -1,3 +1,1 @@
-ufw_rules:
-  - { rule: allow, port: 22, proto: tcp, comment: "ssh" }
-  - { rule: allow, port: 51820, proto: udp, comment: "wireguard" }
+timezone: "Europe/Prague"

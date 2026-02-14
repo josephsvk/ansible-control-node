@@ -1,0 +1,15 @@
+- name: Preflight - require local HOME
+  delegate_to: localhost
+  become: false
+  assert:
+    that:
+      - lookup('env','HOME') | length > 0
+    fail_msg: "HOME is not set on control node; cannot compute ssh_key_dir_local"
+
+- name: Preflight - ensure we are running as a role
+  delegate_to: localhost
+  become: false
+  assert:
+    that:
+      - role_path is defined
+    fail_msg: "ssh_key_setup_v1 must be executed via roles:/include_role/import_role so defaults load"

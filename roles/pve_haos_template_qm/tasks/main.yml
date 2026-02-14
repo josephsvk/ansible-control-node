@@ -1,0 +1,113 @@
+---
+- name: Validate vars (template)
+  ansible.builtin.assert:
+    that:
+      - haos_image_local_path is defined
+      - haos_template_vmid is defined
+      - haos_template_name is defined
+      - haos_storage is defined
+      - haos_storage_interface is defined
+      - haos_bridge is defined
+
+
+- name: Create VM shell (no disk yet)
+  ansible.builtin.command: >
+    qm create {{ haos_template_vmid | int }}
+    --name {{ haos_template_name }}
+    --memory {{ haos_memory_mb | int }}
+    --cores {{ haos_cores | int }}
+    --sockets {{ haos_sockets | int }}
+    --machine {{ haos_machine }}
+    --bios {{ haos_bios }}
+    --scsihw {{ haos_scsihw }}
+    --agent 1
+    --serial0 socket
+  
+  changed_when: true
+
+- name: Ensure EFI disk exists (OVMF)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if ! qm config {{ haos_template_vmid | int }} | grep -q '^efidisk0:'; then
+      qm set {{ haos_template_vmid | int }} --efidisk0 {{ haos_storage }}:0,efitype=4m,pre-enrolled-keys=0
+    fi
+  args:
+    executable: /bin/bash
+  
+  changed_when: true
+
+- name: Ensure network device net0
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if ! qm config {{ haos_template_vmid | int }} | grep -q '^net0:'; then
+      if [ -n "{{ haos_vlan | trim }}" ]; then
+        qm set {{ haos_template_vmid | int }} --net0 {{ haos_net_model }},bridge={{ haos_bridge }},{{ haos_vlan }}
+      else
+        qm set {{ haos_template_vmid | int }} --net0 {{ haos_net_model }},bridge={{ haos_bridge }}
+      fi
+    fi
+  args:
+    executable: /bin/bash
+  
+  changed_when: true
+
+- name: Import HAOS qcow2 into storage (creates unused disk)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if ! qm config {{ haos_template_vmid | int }} | grep -q '^unused0:' && ! qm config {{ haos_template_vmid | int }} | grep -q '^{{ haos_storage_interface }}:'; then
+      qm importdisk {{ haos_template_vmid | int }} {{ haos_image_local_path }} {{ haos_storage }}
+    fi
+  args:
+    executable: /bin/bash
+  
+  changed_when: true
+
+- name: Attach imported disk to storage interface (from unused0)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if ! qm config {{ haos_template_vmid | int }} | grep -q '^{{ haos_storage_interface }}:'; then
+      DISK_REF="$(qm config {{ haos_template_vmid | int }} | awk -F': ' '/^unused0:/{print $2; exit}')"
+      test -n "$DISK_REF"
+      qm set {{ haos_template_vmid | int }} --{{ haos_storage_interface }} "$DISK_REF"
+    fi
+  args:
+    executable: /bin/bash
+  
+  changed_when: true
+
+- name: Set boot order to HAOS disk
+  ansible.builtin.command: "qm set {{ haos_template_vmid | int }} --boot order={{ haos_storage_interface }}"
+  
+  changed_when: true
+
+- name: Optional resize disk
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if [ -n "{{ haos_disk_size_gb | string | trim }}" ]; then
+      qm resize {{ haos_template_vmid | int }} {{ haos_storage_interface }} {{ haos_disk_size_gb }}G || true
+    fi
+  args:
+    executable: /bin/bash
+  
+  changed_when: false
+
+- name: Convert to template
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if ! qm config {{ haos_template_vmid | int }} | grep -q '^template:'; then
+      qm template {{ haos_template_vmid | int }}
+    fi
+  args:
+    executable: /bin/bash
+  
+  changed_when: true
+
+- name: Show resulting config
+  ansible.builtin.command: "qm config {{ haos_template_vmid | int }}"
+  
+  changed_when: false
+  register: _qm_config
+
+- name: Report
+  ansible.builtin.debug:
+    msg: "{{ _qm_config.stdout_lines }}"

@@ -1,0 +1,11 @@
+- name: Upload HAOS qcow2 image to Proxmox storage (template content only)
+  community.proxmox.proxmox_template:
+    node: "{{ pve_node }}"
+    api_host: "{{ pve_api_host }}"
+    api_user: "{{ pve_api_user }}"
+    api_token_id: "{{ pve_api_token_id }}"
+    api_token_secret: "{{ pve_api_token_secret }}"
+    validate_certs: "{{ pve_api_validate_certs }}"
+    storage: "{{ haos_storage }}"
+    content_type: import
+    src: "{{ haos_image_local_path }}"

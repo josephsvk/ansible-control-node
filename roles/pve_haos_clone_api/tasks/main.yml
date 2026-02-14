@@ -1,25 +1,18 @@
 ---
-- name: Get Proxmox nodes via API
-  ansible.builtin.uri:
-    url: "https://{{ pve_api_host }}:8006/api2/json/nodes"
-    method: GET
-    validate_certs: "{{ pve_api_validate_certs }}"
-    headers:
-      Authorization: "PVEAPIToken={{ pve_api_user }}!{{ pve_api_token_id }}={{ pve_api_token_secret }}"
-    return_content: true
-  register: _nodes
-  changed_when: false
-
-- name: Show node names (debug)
-  ansible.builtin.debug:
-    msg: "{{ _nodes.json.data | map(attribute='node') | list }}"
+- name: Validate vars (clone)
+  ansible.builtin.assert:
+    that:
+      - pve_api_host is defined
+      - pve_api_user is defined
+      - pve_api_token_id is defined
+      - pve_api_token_secret is defined
+      - haos_template_vmid is defined
+      - vmid is defined
+      - vm_name is defined
 
 - name: Derived vars
   ansible.builtin.set_fact:
-    _pve_node: "{{ pve_target_node | default(pve_node_default) }}"
-    _ciuser: "{{ pve_ciuser_default }}"
-    _domain: "{{ vm_domain | default(pve_searchdomain_default) }}"
-    _ipconfig0: "{{ vm_ipconfig0 | default(pve_ipconfig0_default) }}"
+    _pve_node: "{{ pve_target_node | default(pve_node_name) }}"
   changed_when: false
 
 - name: Check if target VM exists (API)
@@ -36,9 +29,9 @@
   failed_when: false
   changed_when: false
 
-- name: Clone via raw API (vmid -> newid)
+- name: Clone via API (template -> vm)
   ansible.builtin.uri:
-    url: "https://{{ pve_api_host }}:{{ pve_api_port }}/api2/json/nodes/{{ _pve_node }}/qemu/{{ pve_template_vmid | int }}/clone"
+    url: "https://{{ pve_api_host }}:{{ pve_api_port }}/api2/json/nodes/{{ _pve_node }}/qemu/{{ haos_template_vmid | int }}/clone"
     method: POST
     validate_certs: "{{ pve_api_validate_certs }}"
     headers:
@@ -47,7 +40,7 @@
     body:
       newid: "{{ vmid | int }}"
       name: "{{ vm_name }}"
-      full: "{{ 1 if (pve_clone_full | bool) else 0 }}"
+      full: 1
       target: "{{ _pve_node }}"
     status_code: [200]
   register: _clone_job
@@ -74,38 +67,7 @@
     msg: "Clone failed: {{ _task_status.json.data | to_nice_json }}"
   when: _clone_job is defined and _task_status.json.data.exitstatus is defined and _task_status.json.data.exitstatus != "OK"
 
-- name: Re-check target VM exists after clone (API)
-  community.proxmox.proxmox_kvm:
-    api_host: "{{ pve_api_host }}"
-    api_user: "{{ pve_api_user }}"
-    api_token_id: "{{ pve_api_token_id }}"
-    api_token_secret: "{{ pve_api_token_secret }}"
-    validate_certs: "{{ pve_api_validate_certs }}"
-    node: "{{ _pve_node }}"
-    vmid: "{{ vmid | int }}"
-    state: current
-  register: _current2
-  failed_when: false
-  changed_when: false
-
-- name: Fail if VM still does not exist (clone did not create config)
-  ansible.builtin.fail:
-    msg: "Clone did not create VM config for vmid={{ vmid }} on node={{ _pve_node }}. Check template vmid={{ pve_template_vmid }} exists and API permissions."
-  when: "'does not exist' in (_current2.msg | default('') | lower)"
-
-- name: Read public key content (control node)
-  delegate_to: localhost
-  become: false
-  ansible.builtin.slurp:
-    src: "{{ ssh_pub_key_path_local }}"
-  register: _pub
-
-- name: Set ssh pubkey fact
-  ansible.builtin.set_fact:
-    _ssh_pubkey: "{{ (_pub.content | b64decode).strip() }}"
-  changed_when: false
-
-- name: Configure cloud-init (API) DHCP + searchdomain
+- name: Apply onboot/protection (API update)
   community.proxmox.proxmox_kvm:
     api_host: "{{ pve_api_host }}"
     api_user: "{{ pve_api_user }}"
@@ -115,20 +77,19 @@
     node: "{{ _pve_node }}"
     vmid: "{{ vmid | int }}"
     update: true
-    ciuser: "{{ _ciuser }}"
-    ipconfig:
-      ipconfig0: "{{ _ipconfig0 }}"          # "ip=dhcp"
-    searchdomains:
-      - "{{ _domain }}"                      # "local"
-    sshkeys: "{{ _ssh_pubkey }}"
-    state: restarted
-    
+    onboot: "{{ pve_onboot | default(true) | bool }}"
+    protection: "{{ pve_protection | default(true) | bool }}"
+    state: present
+  changed_when: true
 
-# ZT NOTE:
-# hostname/FQDN nastavíš neskôr cez cicustom snippet alebo bootstrap rolu v guest OS.
-# sshkeys/certy sa tu nepchajú.
-
-
-
-
-  
+- name: Start VM
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ pve_api_host }}"
+    api_user: "{{ pve_api_user }}"
+    api_token_id: "{{ pve_api_token_id }}"
+    api_token_secret: "{{ pve_api_token_secret }}"
+    validate_certs: "{{ pve_api_validate_certs }}"
+    node: "{{ _pve_node }}"
+    vmid: "{{ vmid | int }}"
+    state: started
+    timeout: 300

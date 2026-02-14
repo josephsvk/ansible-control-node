@@ -1,0 +1,16 @@
+---
+#playbooks/pve_haos_v1.yml
+- name: Proxmox haos image v1
+  hosts: pve_vms
+  become: true
+  gather_facts: false
+  
+  roles:
+    - role: pve_haos_download
+      tags: ["step1", "download"]
+
+    - role: pve_haos_template_qm
+      tags: ["step2","template"]
+
+    
+

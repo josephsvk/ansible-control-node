@@ -1,0 +1,10 @@
+pve_node: pve
+vmid: 1101
+vm_name: debian-12-template
+vm_type: template
+os_family: debian
+
+
+
+debian_image_url: "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2"
+debian_qcow2_local_path: "/home/joseph/images/debian-12-genericcloud.qcow2"
