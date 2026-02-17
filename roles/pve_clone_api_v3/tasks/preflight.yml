@@ -1,0 +1,54 @@
+---
+- name: Preflight | show who we are
+  ansible.builtin.debug:
+    msg:
+      - "inventory_hostname={{ inventory_hostname }}"
+      - "group_names={{ group_names | sort }}"
+      - "pve_node={{ pve_node | default('UNDEF') }}"
+
+- name: Preflight | require pve_node on VM object
+  ansible.builtin.assert:
+    that:
+      - pve_node is defined
+      - pve_node | length > 0
+    fail_msg: "Missing pve_node on VM object '{{ inventory_hostname }}'. Add pve_node: pve (or your node host id) to host_vars."
+
+- name: Preflight | require pve_node exists in inventory
+  ansible.builtin.assert:
+    that:
+      - hostvars[pve_node] is defined
+    fail_msg: "pve_node='{{ pve_node }}' does not exist as an inventory host. Create host under pve_nodes and add host_vars/{{ pve_node }}.yml."
+
+- name: Preflight | dump pve_node hostvars keys (sanity)
+  ansible.builtin.debug:
+    msg:
+      - "pve_node hostvars keys (subset)={{ hostvars[pve_node].keys() | list | sort }}"
+
+- name: Preflight | require Proxmox API vars on pve_node
+  ansible.builtin.assert:
+    that:
+      - hostvars[pve_node].pve_api_host is defined
+      - hostvars[pve_node].pve_api_port is defined
+      - hostvars[pve_node].pve_api_user is defined
+      - hostvars[pve_node].pve_api_token_id is defined
+      - hostvars[pve_node].vault_pve_token_secret is defined
+    fail_msg: >-
+      Missing required Proxmox API vars on host '{{ pve_node }}'.
+      Put them into inventories/lab/host_vars/{{ pve_node }}.yml:
+      pve_api_host, pve_api_port, pve_api_user, pve_api_token_id, vault_pve_token_secret.
+
+- name: Preflight | resolve API connection vars (role-local)
+  ansible.builtin.set_fact:
+    _pve_api_host: "{{ hostvars[pve_node].pve_api_host }}"
+    _pve_api_port: "{{ hostvars[pve_node].pve_api_port }}"
+    _pve_api_user: "{{ hostvars[pve_node].pve_api_user }}"
+    _pve_api_token_id: "{{ hostvars[pve_node].pve_api_token_id }}"
+    _pve_api_token_secret: "{{ hostvars[pve_node].vault_pve_token_secret }}"
+
+- name: Preflight | show resolved API endpoint
+  ansible.builtin.debug:
+    msg:
+      - "_pve_api_host={{ _pve_api_host }}"
+      - "_pve_api_port={{ _pve_api_port }}"
+      - "_pve_api_user={{ _pve_api_user }}"
+      - "_pve_api_token_id={{ _pve_api_token_id }}"

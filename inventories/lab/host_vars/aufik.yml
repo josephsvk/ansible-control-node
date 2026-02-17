@@ -1,0 +1,29 @@
+pve_node: pve
+vmid: 201
+vm_name: aufik
+vm_type: instance
+os_family: debian
+
+clone_from_template_vmid: 9001
+
+pve_bridge: vmbr10
+
+# keď po deployi dostane IP, toto je link na reálny SSH host
+ssh_host: "{{ vm_name }}.{{ domain_name }}"
+
+# hw 
+
+pve_cores: 4
+pve_memory: 4096
+pve_balloon: 0
+pve_agent: 1
+pve_onboot: 1
+pve_boot_order: "scsi0;net0"
+pve_scsihw: "virtio-scsi-single"
+
+pve_tags: "debian,secure"
+pve_description: "Debian instance for aufik"
+
+pve_disk_resize_gb: 20
+pve_disk_resize_mode: "plus"
+pve_disk_resize_disk: "scsi0"

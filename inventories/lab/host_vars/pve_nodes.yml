@@ -1,6 +1,0 @@
-# API endpoint (môže byť jeden node alebo VIP)
-pve_api_host: "192.168.1.200"
-pve_api_user: "ansible@pve"
-pve_api_token_id: "ansible"
-pve_api_token_secret: "{{ vault_pve_token_secret }}"
-pve_api_validate_certs: false

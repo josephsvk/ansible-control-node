@@ -1,6 +1,6 @@
 ---
 - name: Provision VM(s) from template via Proxmox API (v2)
-  hosts: pve_vms
+  hosts: pve_instances
   gather_facts: false
 
   vars:
@@ -8,7 +8,17 @@
 
   roles:
     - role: ssh_key_gen_v1
-      tags: ["ssh_key_gen"]
+      tags: ["step1"]
       
-    - role: pve_clone_api_v2
-      tags: ["clone_api"]
+    - role: pve_clone_api_v3
+      tags: ["step2"]
+
+    - role: pve_vm_hw_set_v1
+      tags: ["step3"]
+
+    - role: 
+    - role: devsec.hardening.os_hardening
+      tags: ["step"]
+      vars:
+        sysctl_overwrite:
+          net.ipv4.ip_forward: 1

@@ -1,0 +1,159 @@
+---
+- name: Preflight checks
+  ansible.builtin.import_tasks: preflight.yml
+  tags: [preflight]
+
+# ---- Role-local defaults (deterministické, bez závislosti na cudzích vars)
+- name: Role defaults
+  ansible.builtin.set_fact:
+    _pve_node: "{{ pve_target_node | default(pve_node) }}"   # VM object musí mať pve_node
+    _ciuser: "{{ pve_ciuser | default('ansible') }}"
+    _domain: "{{ vm_domain | default(domain_name | default('local')) }}"
+    _ipconfig0: "{{ vm_ipconfig0 | default('ip=dhcp') }}"
+    _validate_certs: "{{ hostvars[pve_node].pve_api_validate_certs | default(false) }}"
+    _template_vmid: "{{ pve_template_vmid | default(clone_from_template_vmid) }}"
+  changed_when: false
+
+- name: Assert required VM vars exist
+  ansible.builtin.assert:
+    that:
+      - vmid is defined
+      - vm_name is defined
+      - _template_vmid is defined
+      - _pve_node is defined
+    fail_msg: >-
+      Missing required VM vars on '{{ inventory_hostname }}'.
+      Need: vmid, vm_name, clone_from_template_vmid (or pve_template_vmid), pve_node.
+  changed_when: false
+
+# ---- Optional debug: Proxmox nodes info (kept, but safe)
+- name: Get Proxmox nodes via API (info)
+  community.proxmox.proxmox_node_info:
+    api_host: "{{ _pve_api_host }}"
+    api_port: "{{ _pve_api_port }}"
+    api_user: "{{ _pve_api_user }}"
+    api_token_id: "{{ _pve_api_token_id }}"
+    api_token_secret: "{{ _pve_api_token_secret }}"
+    validate_certs: "{{ _validate_certs }}"
+  delegate_to: localhost
+  register: pve_nodes_info
+  changed_when: false
+
+# ---- Check VM existence
+- name: Check if target VM exists (API)
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ _pve_api_host }}"
+    api_port: "{{ _pve_api_port }}"
+    api_user: "{{ _pve_api_user }}"
+    api_token_id: "{{ _pve_api_token_id }}"
+    api_token_secret: "{{ _pve_api_token_secret }}"
+    validate_certs: "{{ _validate_certs }}"
+    node: "{{ _pve_node }}"
+    vmid: "{{ vmid | int }}"
+    state: current
+  delegate_to: localhost
+  register: _current
+  failed_when: false
+  changed_when: false
+
+# ---- Clone only if VM does not exist
+- name: Clone via raw API (template vmid -> newid)
+  ansible.builtin.uri:
+    url: "https://{{ _pve_api_host }}:{{ _pve_api_port }}/api2/json/nodes/{{ _pve_node }}/qemu/{{ _template_vmid | int }}/clone"
+    method: POST
+    validate_certs: "{{ _validate_certs }}"
+    headers:
+      Authorization: "PVEAPIToken={{ _pve_api_user }}!{{ _pve_api_token_id }}={{ _pve_api_token_secret }}"
+    body_format: form-urlencoded
+    body:
+      newid: "{{ vmid | int }}"
+      name: "{{ vm_name }}"
+      full: "{{ 1 if (pve_clone_full | default(true) | bool) else 0 }}"
+      target: "{{ _pve_node }}"
+    status_code: [200]
+  delegate_to: localhost
+  register: _clone_job
+  when: "'does not exist' in (_current.msg | default('') | lower)"
+  changed_when: true
+
+- name: Wait for clone task to finish
+  ansible.builtin.uri:
+    url: "https://{{ _pve_api_host }}:{{ _pve_api_port }}/api2/json/nodes/{{ _pve_node }}/tasks/{{ _clone_job.json.data }}/status"
+    method: GET
+    validate_certs: "{{ _validate_certs }}"
+    headers:
+      Authorization: "PVEAPIToken={{ _pve_api_user }}!{{ _pve_api_token_id }}={{ _pve_api_token_secret }}"
+    return_content: true
+  delegate_to: localhost
+  register: _task_status
+  until: _task_status.json.data.status == "stopped"
+  retries: 120
+  delay: 2
+  when: _clone_job is defined and _clone_job.json is defined and _clone_job.json.data is defined
+  changed_when: false
+
+- name: Fail if clone task failed
+  ansible.builtin.fail:
+    msg: "Clone failed: {{ _task_status.json.data | to_nice_json }}"
+  when: >
+    _clone_job is defined and
+    _task_status is defined and
+    _task_status.json is defined and
+    _task_status.json.data is defined and
+    (_task_status.json.data.exitstatus | default('OK')) != 'OK'
+
+# ---- Re-check existence after clone
+- name: Re-check target VM exists after clone (API)
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ _pve_api_host }}"
+    api_port: "{{ _pve_api_port }}"
+    api_user: "{{ _pve_api_user }}"
+    api_token_id: "{{ _pve_api_token_id }}"
+    api_token_secret: "{{ _pve_api_token_secret }}"
+    validate_certs: "{{ _validate_certs }}"
+    node: "{{ _pve_node }}"
+    vmid: "{{ vmid | int }}"
+    state: current
+  delegate_to: localhost
+  register: _current2
+  failed_when: false
+  changed_when: false
+
+- name: Fail if VM still does not exist
+  ansible.builtin.fail:
+    msg: "Clone did not create VM config for vmid={{ vmid }} on node={{ _pve_node }}. Check template vmid={{ _template_vmid }} and API permissions."
+  when: "'does not exist' in (_current2.msg | default('') | lower)"
+
+# ---- SSH key for cloud-init
+- name: Read public key content (control node)
+  ansible.builtin.slurp:
+    src: "{{ ssh_pub_key_path_local }}"
+  delegate_to: localhost
+  become: false
+  register: _pub
+
+- name: Set ssh pubkey fact
+  ansible.builtin.set_fact:
+    _ssh_pubkey: "{{ (_pub.content | b64decode).strip() }}"
+  changed_when: false
+
+# ---- Cloud-init config: DHCP + searchdomain + ssh key
+- name: Configure cloud-init (API) DHCP + searchdomain + ssh key
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ _pve_api_host }}"
+    api_port: "{{ _pve_api_port }}"
+    api_user: "{{ _pve_api_user }}"
+    api_token_id: "{{ _pve_api_token_id }}"
+    api_token_secret: "{{ _pve_api_token_secret }}"
+    validate_certs: "{{ _validate_certs }}"
+    node: "{{ _pve_node }}"
+    vmid: "{{ vmid | int }}"
+    update: true
+    ciuser: "{{ _ciuser }}"
+    ipconfig:
+      ipconfig0: "{{ _ipconfig0 }}"     # default "ip=dhcp"
+    searchdomains:
+      - "{{ _domain }}"
+    sshkeys: "{{ _ssh_pubkey }}"
+    state: restarted
+  delegate_to: localhost

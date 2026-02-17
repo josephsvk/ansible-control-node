@@ -1,0 +1,38 @@
+---
+- name: Compute resize GB (strict)
+  ansible.builtin.set_fact:
+    _resize_gb: "{{ pve_disk_resize_gb | int }}"
+  changed_when: false
+
+- name: Compute resize size string (strict)
+  ansible.builtin.set_fact:
+    _resize_size: >-
+      {{
+        (pve_disk_resize_mode | default('plus')) == 'absolute'
+        | ternary((_resize_gb | string) ~ 'G', '+' ~ (_resize_gb | string) ~ 'G')
+      }}
+  changed_when: false
+
+- name: Assert resize size format
+  ansible.builtin.assert:
+    that:
+      - _resize_gb > 0
+      - _resize_size is match('^\\+?[0-9]+G$')
+    fail_msg: "Invalid resize size '{{ _resize_size }}'. Must be like +10G or 10G."
+  changed_when: false
+
+- name: Resize disk via raw API
+  ansible.builtin.uri:
+    url: "https://{{ _pve_api_host }}:{{ _pve_api_port }}/api2/json/nodes/{{ pve_node }}/qemu/{{ vmid | int }}/resize"
+    method: PUT
+    validate_certs: "{{ _validate_certs }}"
+    headers:
+      Authorization: "PVEAPIToken={{ _pve_api_user }}!{{ _pve_api_token_id }}={{ _pve_api_token_secret }}"
+    body_format: form-urlencoded
+    body:
+      disk: "{{ pve_disk_resize_disk | default('scsi0') }}"
+      size: "{{ _resize_size }}"
+    status_code: [200]
+  delegate_to: localhost
+  register: _resize_result
+  changed_when: true

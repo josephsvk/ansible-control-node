@@ -63,3 +63,6 @@ ansible user > inštalacia klučov ssh
  ansible-playbook -i inventories/lab/hosts.yml playbooks/bootstrap_root_v1.yml --ask-pass --limit pve
 
 
+# ping na hosta 
+
+ansible vm_testgoldimage -i inventories/lab/hosts.yml -m ping

@@ -1,0 +1,27 @@
+---
+# VM tuning defaults (override per-host / per-group)
+
+# Core compute
+pve_cores: 2
+pve_sockets: 1
+pve_cpu: "host"           # safest for homelab; change if you need migration compatibility
+pve_numa: 0
+
+# Memory
+pve_memory: 2048          # MiB
+pve_balloon: 0            # 0 disables ballooning; set e.g. 1024 to allow reclaim
+
+# Boot/agent
+pve_onboot: 1
+pve_agent: 1              # qemu-guest-agent enabled in config (guest must have agent installed later)
+pve_boot_order: "scsi0;net0"
+
+# Storage controller
+pve_scsihw: "virtio-scsi-single"
+
+# Misc
+pve_hotplug: "network,disk,usb"
+pve_tags: ""              # comma-separated in Proxmox
+pve_description: ""       # free text
+
+

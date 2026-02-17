@@ -1,0 +1,60 @@
+---
+# Expects from your existing flow:
+# - vmid, vm_name, pve_node
+# - API vars resolved in preflight (recommended): _pve_api_host/_pve_api_port/_pve_api_user/_pve_api_token_id/_pve_api_token_secret/_validate_certs
+
+- name: Preflight | require required VM vars
+  ansible.builtin.assert:
+    that:
+      - vmid is defined
+      - pve_node is defined
+      - hostvars[pve_node] is defined
+    fail_msg: "Missing vmid/pve_node or pve_node host not found in inventory."
+  changed_when: false
+
+# Resolve API vars from hostvars[pve_node] if your pipeline doesn't already set _pve_* facts
+- name: Resolve API vars (fallback)
+  ansible.builtin.set_fact:
+    _pve_api_host: "{{ _pve_api_host | default(hostvars[pve_node].pve_api_host) }}"
+    _pve_api_port: "{{ _pve_api_port | default(hostvars[pve_node].pve_api_port | default(8006)) }}"
+    _pve_api_user: "{{ _pve_api_user | default(hostvars[pve_node].pve_api_user) }}"
+    _pve_api_token_id: "{{ _pve_api_token_id | default(hostvars[pve_node].pve_api_token_id) }}"
+    _pve_api_token_secret: "{{ _pve_api_token_secret | default(hostvars[pve_node].vault_pve_token_secret) }}"
+    _validate_certs: "{{ _validate_certs | default(hostvars[pve_node].pve_api_validate_certs | default(false)) }}"
+  changed_when: false
+
+- name: Tune VM config (CPU/RAM/agent/boot/scsi/onboot)
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ _pve_api_host }}"
+    api_port: "{{ _pve_api_port }}"
+    api_user: "{{ _pve_api_user }}"
+    api_token_id: "{{ _pve_api_token_id }}"
+    api_token_secret: "{{ _pve_api_token_secret }}"
+    validate_certs: "{{ _validate_certs }}"
+    node: "{{ pve_node }}"
+    vmid: "{{ vmid | int }}"
+    update: true
+
+    # CPU/RAM
+    cores: "{{ pve_cores | int }}"
+    sockets: "{{ pve_sockets | int }}"
+    cpu: "{{ pve_cpu }}"
+    memory: "{{ pve_memory | int }}"
+    balloon: "{{ pve_balloon | int }}"
+
+    # Platform
+    scsihw: "{{ pve_scsihw }}"
+
+    # Agent / boot
+    agent: "{{ pve_agent | int }}"
+    onboot: "{{ pve_onboot | int }}"
+    boot: "order={{ pve_boot_order }}"
+
+    # Misc
+    hotplug: "{{ pve_hotplug }}"
+    description: "{{ pve_description | default('') }}"
+    tags: "{{ pve_tags | default('') }}"
+
+  delegate_to: localhost
+
+

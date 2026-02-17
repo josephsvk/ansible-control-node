@@ -1,6 +1,0 @@
----
-- name: Local control-node config
-  hosts: localhost
-  gather_facts: false
-  roles:
-    - role: ssh_config_local
