@@ -3,3 +3,4 @@ collections:
   - name: community.general
   - name: community.proxmox
   - name: devsec.hardening
+  - name: debops.debops

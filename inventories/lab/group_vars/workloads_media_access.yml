@@ -1,0 +1,26 @@
+# group_vars/workloads_jellyfin.yml
+nfs__shares:
+
+# Movies share is read-only for media access workload, but read-write for media management workload.
+  - path: '/mnt/media/Movies'
+    src:  'pve.joseph4lansolo.xyz:/MediaPool/Movies'
+    fstype: 'nfs'
+    opts: [ 'ro', 'noatime', 'vers=4.1', 'proto=tcp' ]
+
+# Serials share is read-only for media access workload, but read-write for media management workload.
+  - path: '/mnt/media/Serials'
+    src:  'pve.joseph4lansolo.xyz:/MediaPool/Serials'
+    fstype: 'nfs'
+    opts: [ 'ro', 'noatime', 'vers=4.1', 'proto=tcp' ]
+
+# Anime share is read-only for media access workload, but read-write for media management workload.
+  - path: '/mnt/media/Anime'
+    src:  'pve.joseph4lansolo.xyz:/MediaPool/Anime'
+    fstype: 'nfs'
+    opts: [ 'ro', 'noatime', 'vers=4.1', 'proto=tcp' ]
+
+# Music share is read-write for media management workload, but read-only for media access workload. 
+  - path: '/mnt/media/Music'
+    src:  'pve.joseph4lansolo.xyz:/MediaPool/Music'
+    fstype: 'nfs'
+    opts: [ 'ro', 'noatime', 'vers=4.1', 'proto=tcp' ]

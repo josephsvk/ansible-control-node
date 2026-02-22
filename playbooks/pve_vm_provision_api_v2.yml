@@ -1,7 +1,8 @@
 ---
 - name: Provision VM(s) from template via Proxmox API (v2)
   hosts: pve_instances
-  gather_facts: false
+  gather_facts: true
+
 
   vars:
     ansible_python_interpreter: "{{ playbook_dir }}/../.venv/bin/python"
@@ -15,10 +16,6 @@
 
     - role: pve_vm_hw_set_v1
       tags: ["step3"]
-
-    - role: 
-    - role: devsec.hardening.os_hardening
-      tags: ["step"]
-      vars:
-        sysctl_overwrite:
-          net.ipv4.ip_forward: 1
+    
+    - role: root_to_normal
+      tags: ["step4"]

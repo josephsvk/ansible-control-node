@@ -1,0 +1,6 @@
+- name: Docker server
+  hosts: localhost
+  become: true
+
+  roles:
+    - role: debops.debops.docker_server

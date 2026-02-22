@@ -1,0 +1,22 @@
+---
+nfs__shares:
+
+  - path: '/mnt/media/Movies'
+    src:  'pve.joseph4lansolo.xyz:/MediaPool/Movies'
+    fstype: 'nfs'
+    opts: [ 'rw', 'noatime', 'vers=4.1', 'proto=tcp' ]
+
+  - path: '/mnt/media/Serials'
+    src:  'pve.joseph4lansolo.xyz:/MediaPool/Serials'
+    fstype: 'nfs'
+    opts: [ 'rw', 'noatime', 'vers=4.1', 'proto=tcp' ]
+
+  - path: '/mnt/media/Anime'
+    src:  'pve.joseph4lansolo.xyz:/MediaPool/Anime'
+    fstype: 'nfs'
+    opts: [ 'rw', 'noatime', 'vers=4.1', 'proto=tcp' ]
+
+  - path: '/mnt/media/download'
+    src:  'pve.joseph4lansolo.xyz:/MediaPool/Download'
+    fstype: 'nfs'
+    opts: [ 'rw', 'noatime', 'vers=4.1', 'proto=tcp' ]

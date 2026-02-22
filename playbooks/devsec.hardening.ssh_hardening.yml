@@ -1,0 +1,10 @@
+- hosts: managed
+  become_method: sudo
+  become: true
+
+  roles:
+    - devsec.hardening.ssh_hardening
+    
+    - security_fail2ban_v1 
+
+

@@ -24,6 +24,21 @@ pve_scsihw: "virtio-scsi-single"
 pve_tags: "debian,secure"
 pve_description: "Debian instance for aufik"
 
-pve_disk_resize_gb: 20
-pve_disk_resize_mode: "plus"
-pve_disk_resize_disk: "scsi0"
+domain_name: joseph4lansolo.xyz
+
+
+# DebOps docker_server
+docker_server__enabled: true
+
+# (voliteľné) povoliť používateľovi ovládať docker bez sudo
+docker_server__admins:
+  - "ansible"
+
+# (voliteľné) docker daemon hardening baseline
+docker_server__daemon_options:
+  userland-proxy: false
+  live-restore: true
+  log-driver: "json-file"
+  log-opts:
+    max-size: "10m"
+    max-file: "3"

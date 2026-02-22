@@ -1,0 +1,50 @@
+nfs_server__exports:
+
+  - name: mediapool_movies
+    path: /MediaPool/Movies
+    options:
+      - sync
+      - root_squash
+    clients:
+      - name: stream1.joseph4lansolo.xyz
+        options: [ ro ]
+      - name: starr1.joseph4lansolo.xyz
+        options: [ rw ]
+
+  - name: mediapool_serials
+    path: /MediaPool/Serials
+    options:
+      - sync
+      - root_squash
+    clients:
+      - name: stream1.joseph4lansolo.xyz
+        options: [ ro ]
+      - name: starr1.joseph4lansolo.xyz
+        options: [ rw ]
+
+  - name: mediapool_music
+    path: /MediaPool/Music
+    options:
+      - sync
+      - root_squash
+    clients:
+      - name: 10.10.10.0/24
+        options: [ rw ]
+
+  - name: mediapool_download
+    path: /MediaPool/Download
+    options:
+      - sync
+      - root_squash
+    clients:
+      - name: 10.10.10.0/24
+        options: [ rw ]
+
+  - name: secure_arr_configs
+    path: /Secure/Configs/ArrConfigs
+    options:
+      - sync
+      - root_squash
+    clients:
+      - name: starr1.joseph4lansolo.xyz
+        options: [ rw ]
