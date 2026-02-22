@@ -1,0 +1,83 @@
+# group_vars/storage_pools_contract.yml
+
+storage_pools_contract:
+
+  local_zfs:
+    pve_storage: "local-zfs"
+    pool: "rpool/data"
+    role: "compute-baseline"
+    allowed:
+      - "vm_os_disks"
+      - "lxc_rootfs"
+      - "templates"
+    forbidden:
+      - "vault_data"
+      - "databases"
+      - "app_state"
+      - "backups_primary"
+    defaults:
+      zfs:
+        compression: "lz4-or-on"
+        atime: "on-ok"
+        recordsize: "128K"
+
+  nvme:
+    pve_storage: "nvme0n1"
+    pool: "nvme0n1"
+    role: "performance-tier"
+    allowed:
+      - "cache"
+      - "transcode"
+      - "scratch"
+      - "high_iops_state_with_explicit_backup"
+    forbidden:
+      - "only-copy-of-truth"
+    defaults:
+      zfs:
+        compression: "lz4"
+        atime: "off"
+        recordsize: "128K"
+
+  secure:
+    pve_storage: "Secure"
+    pool: "Secure"
+    role: "stateful-tier"
+    allowed:
+      - "vault_data"
+      - "databases"
+      - "identity"
+      - "appdata"
+      - "backups_target"
+      - "audit_logs"
+    forbidden:
+      - "transcode_cache"
+      - "bulk_media"
+    defaults:
+      zfs:
+        compression: "lz4"
+        atime: "off"
+        recordsize: "128K"
+      security:
+        encryption_planned: true
+
+  media:
+    pve_storages:
+      - "Movies"
+      - "Serials"
+      - "Anime"
+      - "Music"
+      - "Download"
+    role: "bulk-media-tier"
+    allowed:
+      - "large_files"
+      - "media_libraries"
+      - "downloads"
+    forbidden:
+      - "configs"
+      - "databases"
+      - "secrets"
+    defaults:
+      zfs:
+        compression: "lz4"
+        atime: "off"
+        recordsize: "1M-or-128K"
