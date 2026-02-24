@@ -15,3 +15,5 @@ pve_default_storage: local-zfs
 
 pve_storage_images: local-zfs
 pve_storage_snippets: VM
+
+ansible_ssh_common_args: "-o IdentitiesOnly=yes"

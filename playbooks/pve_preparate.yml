@@ -1,0 +1,6 @@
+---
+# Prepare Proxmox nodes
+- name: Prepare Proxmox nodes
+  hosts: localhost
+  roles:
+    - role: proxmox_prepare

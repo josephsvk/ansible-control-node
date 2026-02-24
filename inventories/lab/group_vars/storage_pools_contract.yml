@@ -1,83 +1,391 @@
-# group_vars/storage_pools_contract.yml
+# group_vars/storage_contract_enterprise.yml
+# Enterprise Storage + Workloads Contract (tier -> namespace -> policy -> workload intents)
 
-storage_pools_contract:
+storage_contract:
 
-  local_zfs:
-    pve_storage: "local-zfs"
-    pool: "rpool/data"
-    role: "compute-baseline"
-    allowed:
-      - "vm_os_disks"
-      - "lxc_rootfs"
-      - "templates"
-    forbidden:
-      - "vault_data"
-      - "databases"
-      - "app_state"
-      - "backups_primary"
-    defaults:
-      zfs:
-        compression: "lz4-or-on"
-        atime: "on-ok"
+  version: "1.0"
+
+  # ============================================================
+  # TIERS (Proxmox storages + ZFS pools)
+  # ============================================================
+  tiers:
+
+    local_zfs:
+      pve_storages: ["local-zfs"]
+      zfs_pool: "rpool/data"
+      role: "compute-baseline"
+      capabilities:
+        iops: "medium"
+        latency: "medium"
+        redundancy: "mirror-or-raidz"
+        encryption: "none"
+        snapshots: true
+      allow_purposes: ["vm_os_disks", "lxc_rootfs", "templates"]
+      deny_purposes: ["vault_data", "databases", "identity", "secrets", "pki", "audit_logs", "backups_target", "only-copy-of-truth"]
+      defaults:
+        zfs:
+          compression: "lz4"
+          atime: "on"
+          recordsize: "128K"
+          xattr: "sa"
+          acltype: "posixacl"
+          sync: "standard"
+          logbias: "latency"
+        snapshot_policy: "daily_14_weekly_8_monthly_6"
+
+    nvme:
+      pve_storages: ["nvme0n1"]
+      zfs_pool: "nvme0n1"
+      role: "performance-tier"
+      capabilities:
+        iops: "high"
+        latency: "low"
+        redundancy: "single"
+        encryption: "none"
+        snapshots: true
+      allow_purposes: ["cache", "transcode", "scratch", "high_iops_state_with_explicit_backup"]
+      deny_purposes: ["only-copy-of-truth", "vault_data", "secrets", "pki"]
+      constraints:
+        must_have_replication: true
+      defaults:
+        zfs:
+          compression: "lz4"
+          atime: "off"
+          recordsize: "128K"
+          xattr: "sa"
+          acltype: "posixacl"
+          sync: "standard"
+          logbias: "throughput"
+        snapshot_policy: "hourly_24_daily_14_weekly_8"
+
+    secure:
+      pve_storages: ["Secure"]
+      zfs_pool: "Secure"
+      role: "stateful-tier"
+      capabilities:
+        iops: "high"
+        latency: "low"
+        redundancy: "mirror-or-raidz"
+        encryption: "planned"
+        snapshots: true
+      constraints:
+        must_be_redundant: true
+        must_be_encrypted: true
+
+      exclusions:
+        - "Secure/.ix-virt"
+        - "Secure/.ix-virt/*"
+        - "Secure/ix-apps"
+        - "Secure/ix-apps/*"
+
+      namespaces:
+        root:        "Secure"
+        workloads:   "Secure/workloads"
+        platform:    "Secure/platform"
+        shared:      "Secure/shared"
+        logs:        "Secure/logs"
+        backups:     "Secure/backups"
+
+      allow_purposes:
+        - "vault_data"
+        - "audit_logs"
+        - "backups_target"
+        - "databases"
+        - "identity"
+        - "app_state"
+        - "configs"
+        - "secrets"
+        - "pki"
+        - "iac"
+      deny_purposes:
+        - "bulk_media"
+        - "transcode_cache"
+
+      defaults:
+        zfs:
+          compression: "lz4"
+          atime: "off"
+          recordsize: "128K"
+          xattr: "sa"
+          acltype: "posixacl"
+          sync: "standard"
+          logbias: "latency"
+        snapshot_policy: "daily_30_weekly_12_monthly_12"
+
+    media:
+      pve_storages: ["Movies", "Serials", "Anime", "Music", "Download"]
+      role: "bulk-media-tier"
+      capabilities:
+        iops: "low"
+        latency: "high"
+        redundancy: "raidz-or-mirror"
+        encryption: "none"
+        snapshots: true
+      allow_purposes: ["large_files", "media_libraries", "downloads"]
+      deny_purposes: ["configs", "databases", "secrets", "vault_data"]
+      defaults:
+        zfs:
+          compression: "lz4"
+          atime: "off"
+          recordsize: "1M"
+          xattr: "sa"
+          acltype: "posixacl"
+          sync: "standard"
+          logbias: "throughput"
+        snapshot_policy: "daily_7_weekly_4"
+
+  # ============================================================
+  # SNAPSHOT POLICIES (names used by tiers/policies/workloads)
+  # ============================================================
+  snapshot_policies:
+    hourly_24_daily_14_weekly_8:
+      keep: { hourly: 24, daily: 14, weekly: 8 }
+    hourly_48_daily_30_weekly_12_monthly_12:
+      keep: { hourly: 48, daily: 30, weekly: 12, monthly: 12 }
+    daily_14_weekly_8_monthly_6:
+      keep: { daily: 14, weekly: 8, monthly: 6 }
+    daily_30_weekly_12_monthly_12:
+      keep: { daily: 30, weekly: 12, monthly: 12 }
+    daily_7_weekly_4:
+      keep: { daily: 7, weekly: 4 }
+
+  # ============================================================
+  # DATA POLICIES (reusable ZFS policy blocks)
+  # ============================================================
+  data_policies:
+
+    os_default:
+      zfs_overrides:
         recordsize: "128K"
+        sync: "standard"
+        logbias: "latency"
+      snapshot_policy: "daily_14_weekly_8_monthly_6"
 
-  nvme:
-    pve_storage: "nvme0n1"
-    pool: "nvme0n1"
-    role: "performance-tier"
-    allowed:
-      - "cache"
-      - "transcode"
-      - "scratch"
-      - "high_iops_state_with_explicit_backup"
-    forbidden:
-      - "only-copy-of-truth"
-    defaults:
-      zfs:
-        compression: "lz4"
-        atime: "off"
-        recordsize: "128K"
+    vault_raft:
+      zfs_overrides:
+        recordsize: "16K"
+        sync: "always"
+        logbias: "latency"
+      snapshot_policy: "hourly_48_daily_30_weekly_12_monthly_12"
 
-  secure:
-    pve_storage: "Secure"
-    pool: "Secure"
-    role: "stateful-tier"
-    allowed:
-      - "vault_data"
-      - "databases"
-      - "identity"
-      - "appdata"
-      - "backups_target"
-      - "audit_logs"
-    forbidden:
-      - "transcode_cache"
-      - "bulk_media"
-    defaults:
-      zfs:
-        compression: "lz4"
-        atime: "off"
+    db_latency:
+      zfs_overrides:
+        recordsize: "16K"
+        sync: "standard"
+        logbias: "latency"
+      snapshot_policy: "hourly_24_daily_14_weekly_8"
+
+    audit_logs:
+      zfs_overrides:
         recordsize: "128K"
+        sync: "standard"
+        logbias: "latency"
+      snapshot_policy: "daily_30_weekly_12_monthly_12"
+
+    backups_bulk:
+      zfs_overrides:
+        recordsize: "1M"
+        sync: "standard"
+        logbias: "throughput"
+      snapshot_policy: "daily_14_weekly_8_monthly_6"
+
+    secrets_strict:
+      zfs_overrides:
+        recordsize: "128K"
+        sync: "always"
+        logbias: "latency"
+      snapshot_policy: "daily_30_weekly_12_monthly_12"
+
+    pki_strict:
+      zfs_overrides:
+        recordsize: "128K"
+        sync: "always"
+        logbias: "latency"
+      snapshot_policy: "daily_30_weekly_12_monthly_12"
+
+    configs_general:
+      zfs_overrides:
+        recordsize: "128K"
+        sync: "standard"
+        logbias: "latency"
+      snapshot_policy: "daily_30_weekly_12_monthly_12"
+
+    state_general:
+      zfs_overrides:
+        recordsize: "128K"
+        sync: "standard"
+        logbias: "latency"
+      snapshot_policy: "daily_30_weekly_12_monthly_12"
+
+  # ============================================================
+  # PURPOSE MAP (purpose -> tier + namespace path template + policy)
+  # Namespace path is resolved into a dataset path.
+  # ============================================================
+  purposes:
+
+    vm_os_disks:
+      tier: "local_zfs"
+      namespace_path: null
+      policy: "os_default"
+
+    vault_data:
+      tier: "secure"
+      namespace_path: "Secure/workloads/vault/{{ workload_id }}/raft"
+      policy: "vault_raft"
+
+    audit_logs:
+      tier: "secure"
+      namespace_path: "Secure/logs/{{ workload_id }}"
+      policy: "audit_logs"
+
+    backups_target:
+      tier: "secure"
+      namespace_path: "Secure/backups/{{ workload_id }}"
+      policy: "backups_bulk"
+
+    databases:
+      tier: "secure"
+      namespace_path: "Secure/workloads/databases/{{ workload_id }}"
+      policy: "db_latency"
+
+    identity:
+      tier: "secure"
+      namespace_path: "Secure/workloads/identity/{{ workload_id }}"
+      policy: "state_general"
+
+    app_state:
+      tier: "secure"
+      namespace_path: "Secure/workloads/app_state/{{ workload_id }}"
+      policy: "state_general"
+
+    configs:
+      tier: "secure"
+      namespace_path: "Secure/shared/configs/{{ workload_id }}"
+      policy: "configs_general"
+
+    secrets:
+      tier: "secure"
+      namespace_path: "Secure/shared/secrets/{{ workload_id }}"
+      policy: "secrets_strict"
+
+    pki:
+      tier: "secure"
+      namespace_path: "Secure/shared/pki/{{ workload_id }}"
+      policy: "pki_strict"
+
+    iac:
+      tier: "secure"
+      namespace_path: "Secure/shared/iac/{{ workload_id }}"
+      policy: "configs_general"
+
+    cache:
+      tier: "nvme"
+      namespace_path: "nvme0n1/cache/{{ workload_id }}"
+      policy: "state_general"
+
+    transcode:
+      tier: "nvme"
+      namespace_path: "nvme0n1/transcode/{{ workload_id }}"
+      policy: "state_general"
+
+    scratch:
+      tier: "nvme"
+      namespace_path: "nvme0n1/scratch/{{ workload_id }}"
+      policy: "state_general"
+
+    large_files:
+      tier: "media"
+      namespace_path: null
+      policy: null
+
+    media_libraries:
+      tier: "media"
+      namespace_path: null
+      policy: null
+
+    downloads:
+      tier: "media"
+      namespace_path: null
+      policy: null
+
+  # ============================================================
+  # WORKLOADS (enterprise catalog)
+  # Declares: what data classes exist, which purposes they use,
+  # and a canonical workload_id format.
+  # ============================================================
+  workloads:
+
+    vault:
+      workload_id_format: "vault-{{ env }}-{{ name }}"
+      description: "HashiCorp Vault (raft) + audit logs + backups"
+      requires:
+        - { purpose: "vault_data",     min_size: "32G" }
+        - { purpose: "audit_logs",     min_size: "16G" }
+        - { purpose: "backups_target", min_size: "32G" }
+      optional:
+        - { purpose: "configs", min_size: "4G" }
+        - { purpose: "pki",     min_size: "4G" }
       security:
-        encryption_planned: true
+        encryption_required: true
+        redundancy_required: true
 
-  media:
-    pve_storages:
-      - "Movies"
-      - "Serials"
-      - "Anime"
-      - "Music"
-      - "Download"
-    role: "bulk-media-tier"
-    allowed:
-      - "large_files"
-      - "media_libraries"
-      - "downloads"
-    forbidden:
-      - "configs"
-      - "databases"
-      - "secrets"
-    defaults:
-      zfs:
-        compression: "lz4"
-        atime: "off"
-        recordsize: "1M-or-128K"
+    databases_postgres:
+      workload_id_format: "pg-{{ env }}-{{ name }}"
+      description: "PostgreSQL primary data + logs + backups"
+      requires:
+        - { purpose: "databases",      min_size: "64G" }
+        - { purpose: "audit_logs",     min_size: "16G" }
+        - { purpose: "backups_target", min_size: "64G" }
+
+    identity_authentik:
+      workload_id_format: "idp-{{ env }}-{{ name }}"
+      description: "IdP state + configs + backups"
+      requires:
+        - { purpose: "identity",       min_size: "32G" }
+        - { purpose: "configs",        min_size: "8G" }
+        - { purpose: "backups_target", min_size: "32G" }
+
+    apps_generic:
+      workload_id_format: "app-{{ env }}-{{ name }}"
+      description: "Generic stateful app state + configs + backups"
+      requires:
+        - { purpose: "app_state",      min_size: "16G" }
+        - { purpose: "configs",        min_size: "8G" }
+        - { purpose: "backups_target", min_size: "32G" }
+
+    media_stack:
+      workload_id_format: "media-{{ env }}-{{ name }}"
+      description: "Bulk media libraries + downloads + optional caches"
+      requires:
+        - { purpose: "media_libraries" }
+        - { purpose: "downloads" }
+      optional:
+        - { purpose: "transcode" }
+        - { purpose: "cache" }
+
+    iac_platform:
+      workload_id_format: "iac-{{ env }}-{{ name }}"
+      description: "Infrastructure-as-code + secrets + backups"
+      requires:
+        - { purpose: "iac",            min_size: "16G" }
+        - { purpose: "secrets",        min_size: "8G" }
+        - { purpose: "backups_target", min_size: "32G" }
+
+  # ============================================================
+  # RESOLUTION RULES (how automation should resolve a request)
+  # ============================================================
+  resolution:
+
+    # If a purpose defines namespace_path, create/ensure dataset exists.
+    # If null, the storage is managed by Proxmox storage root (or external tier).
+    create_dataset_when_namespace_path_present: true
+
+    # dataset path rendering variables available:
+    # - workload_id (computed from workload spec)
+    # - env, name (from host_vars / inventory vars)
+    # - inventory_hostname
+    template_vars:
+      required: ["env", "name"]
+
+    # Prevent using excluded datasets for automation
+    honor_exclusions: true

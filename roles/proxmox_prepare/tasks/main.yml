@@ -1,0 +1,7 @@
+- name: Install proxmoxer via apt (PEP 668 safe)
+  ansible.builtin.apt:
+    name:
+      - python3-proxmoxer
+      - python3-requests
+    state: present
+    update_cache: true
