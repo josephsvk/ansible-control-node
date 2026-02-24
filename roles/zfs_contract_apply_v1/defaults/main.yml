@@ -1,0 +1,54 @@
+# roles/zfs_contract_apply_v1/defaults/main.yml
+
+zfs_contract_apply__contract_var: "storage_contract"
+zfs_contract_apply__contract: "{{ vars[zfs_contract_apply__contract_var] | default({}) }}"
+
+zfs_contract_apply__enabled: true
+
+# safety switches
+zfs_contract_apply__allow_property_changes: true
+zfs_contract_apply__allow_create: true
+zfs_contract_apply__allow_destroy: false
+
+# create datasets only for these tiers (default: secure only)
+zfs_contract_apply__tiers: ["secure"]
+
+# only manage datasets under these prefixes
+zfs_contract_apply__managed_prefixes:
+  - "Secure/workloads"
+  - "Secure/shared"
+  - "Secure/logs"
+  - "Secure/backups"
+
+# exclude system-managed (must match your contract exclusions)
+zfs_contract_apply__exclude_prefixes:
+  - "Secure/.ix-virt"
+  - "Secure/ix-apps"
+
+# rendering variables
+zfs_contract_apply__env_default: "prod"
+zfs_contract_apply__name_default: "{{ inventory_hostname }}"
+
+# workload inventory groups whose hostvars may define workload intents
+zfs_contract_apply__workload_groups:
+  - "pve_instances"
+  - "managed"
+  - "vms_ssh"
+
+# dataset creation options
+zfs_contract_apply__canmount_default: "off"
+zfs_contract_apply__mountpoint_default: "none"
+
+# baseline properties if not specified anywhere (kept minimal)
+zfs_contract_apply__baseline_props:
+  compression: "lz4"
+  atime: "off"
+  recordsize: "128K"
+  xattr: "{{ zfs_platform_profile.xattr }}"
+  acltype: "{{ zfs_platform_profile.acltype }}"
+  sync: "standard"
+  logbias: "latency"
+
+zfs_platform_profile:
+  xattr: "on"
+  acltype: "posix"

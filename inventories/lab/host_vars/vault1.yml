@@ -26,23 +26,15 @@ pve_description: "HashiCorp Vault – raft + audit + backups"
 workload:
   type: "vault"
 
-# Disks (purpose-based; contract resolves tier/dataset/policy)
 vm_storage_plan:
-  scsi0:
-    purpose: "vm_os_disks"
-    pool_ref: "local_zfs"
-    size: "32G"
-
   scsi1:
     purpose: "vault_data"
     pool_ref: "secure"
     size: "64G"
-
   scsi2:
     purpose: "audit_logs"
     pool_ref: "secure"
     size: "32G"
-
   scsi3:
     purpose: "backups_target"
     pool_ref: "secure"

@@ -1,0 +1,10 @@
+# playbooks/zfs_contract_apply.yml
+---
+- name: Apply ZFS enterprise contract (non-destructive)
+  hosts: pve
+  gather_facts: false
+  become: true
+  become_method: sudo
+  roles:
+    - role: zfs_contract_apply_v1
+      tags: ["zfs_contract"]

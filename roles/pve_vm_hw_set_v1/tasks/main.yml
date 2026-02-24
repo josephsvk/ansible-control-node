@@ -1,29 +1,43 @@
----
-# Expects from your existing flow:
-# - vmid, vm_name, pve_node
-# - API vars resolved in preflight (recommended): _pve_api_host/_pve_api_port/_pve_api_user/_pve_api_token_id/_pve_api_token_secret/_validate_certs
-
-- name: Preflight | require required VM vars
-  ansible.builtin.assert:
-    that:
-      - vmid is defined
-      - pve_node is defined
-      - hostvars[pve_node] is defined
-    fail_msg: "Missing vmid/pve_node or pve_node host not found in inventory."
-  changed_when: false
-
-# Resolve API vars from hostvars[pve_node] if your pipeline doesn't already set _pve_* facts
-- name: Resolve API vars (fallback)
+# ---------- NEW: compute net dict for proxmox_kvm ----------
+- name: Compute net dict (bridge)
   ansible.builtin.set_fact:
-    _pve_api_host: "{{ _pve_api_host | default(hostvars[pve_node].pve_api_host) }}"
-    _pve_api_port: "{{ _pve_api_port | default(hostvars[pve_node].pve_api_port | default(8006)) }}"
-    _pve_api_user: "{{ _pve_api_user | default(hostvars[pve_node].pve_api_user) }}"
-    _pve_api_token_id: "{{ _pve_api_token_id | default(hostvars[pve_node].pve_api_token_id) }}"
-    _pve_api_token_secret: "{{ _pve_api_token_secret | default(hostvars[pve_node].vault_pve_token_secret) }}"
-    _validate_certs: "{{ _validate_certs | default(hostvars[pve_node].pve_api_validate_certs | default(false)) }}"
+    _pve_net: >-
+      {{
+        {
+          "net0": "virtio,bridge=" ~ (pve_bridge | default("vmbr0"))
+        }
+      }}
   changed_when: false
 
-- name: Tune VM config (CPU/RAM/agent/boot/scsi/onboot)
+# ---------- NEW: map purpose -> pve storage name ----------
+- name: Build scsi dict from vm_storage_plan (purpose -> storage)
+  ansible.builtin.set_fact:
+    _pve_scsi: >-
+      {{
+        _pve_scsi | default({}) |
+        combine({
+          item.key: (
+            (
+              "vault"   if item.value.purpose == "vault_data" else
+              "logs"    if item.value.purpose == "audit_logs" else
+              "backups" if item.value.purpose == "backups_target" else
+              "Secure"
+            )
+            ~ ":" ~ (item.value.size | regex_replace("G$", "") | int)
+          )
+        })
+      }}
+  loop: "{{ (vm_storage_plan | default({})) | dict2items }}"
+  when:
+    - vm_storage_plan is defined
+    - item.key is match('^scsi[1-9]$')
+    - item.value is mapping
+    - item.value.size is defined
+    - item.value.purpose is defined
+  changed_when: false
+
+# ---------- APPLY ----------
+- name: Tune VM config (CPU/RAM/agent/boot/scsihw/onboot )
   community.proxmox.proxmox_kvm:
     api_host: "{{ _pve_api_host }}"
     api_port: "{{ _pve_api_port }}"
@@ -50,11 +64,57 @@
     onboot: "{{ pve_onboot | int }}"
     boot: "order={{ pve_boot_order }}"
 
+
     # Misc
     hotplug: "{{ pve_hotplug }}"
     description: "{{ pve_description | default('') }}"
     tags: "{{ pve_tags | default('') }}"
-
   delegate_to: localhost
 
+  # --- Read current VM config (no python on pve)
+- name: Read current VM config (qm) via raw
+  ansible.builtin.raw: "qm config {{ vmid | int }}"
+  register: _qm_cfg
+  changed_when: false
+  delegate_to: "{{ pve_node }}"
 
+# --- Network bridge (net0)
+- name: Set net0 bridge to pve_bridge (qm) via raw
+  ansible.builtin.raw: "qm set {{ vmid | int }} --net0 virtio,bridge={{ pve_bridge | default('vmbr0') }}"
+  when: _qm_cfg.stdout is not search('net0:.*bridge=' ~ (pve_bridge | default('vmbr0')))
+  delegate_to: "{{ pve_node }}"
+
+# --- Disks (scsi1..9)
+- name: Add SCSI disks from vm_storage_plan (qm) via raw
+  ansible.builtin.raw: >-
+    qm set {{ vmid | int }}
+    --{{ item.key }} {{
+      (
+        'vault'   if item.value.purpose == 'vault_data' else
+        'logs'    if item.value.purpose == 'audit_logs' else
+        'backups' if item.value.purpose == 'backups_target' else
+        'Secure'
+      )
+    }}:{{ item.value.size | regex_replace('G$','') | int }}
+  loop: "{{ (vm_storage_plan | default({})) | dict2items }}"
+  when:
+    - item.key is match('^scsi[1-9]$')
+    - item.value is mapping
+    - item.value.purpose is defined
+    - item.value.size is defined
+    - _qm_cfg.stdout is not search('^' ~ item.key ~ ':', multiline=True)
+  delegate_to: "{{ pve_node }}"
+
+# --- Add scsi disks from vm_storage_plan if missing
+- name: Add SCSI disks from vm_storage_plan (qm set)
+  ansible.builtin.command: >-
+    qm set {{ vmid | int }}
+    --{{ item.key }} {{ _disk_storage_map[item.value.purpose] | default('Secure') }}:{{ item.value.size | regex_replace('G$','') | int }}
+  loop: "{{ (vm_storage_plan | default({})) | dict2items }}"
+  when:
+    - item.key is match('^scsi[1-9]$')
+    - item.value is mapping
+    - item.value.purpose is defined
+    - item.value.size is defined
+    - _qm_cfg.stdout is not search('^' ~ item.key ~ ':', multiline=True)
+  delegate_to: "{{ pve_node }}"

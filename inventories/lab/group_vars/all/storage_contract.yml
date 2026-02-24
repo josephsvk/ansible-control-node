@@ -27,8 +27,7 @@ storage_contract:
           compression: "lz4"
           atime: "on"
           recordsize: "128K"
-          xattr: "sa"
-          acltype: "posixacl"
+          xattr: "on"
           sync: "standard"
           logbias: "latency"
         snapshot_policy: "daily_14_weekly_8_monthly_6"
@@ -46,14 +45,13 @@ storage_contract:
       allow_purposes: ["cache", "transcode", "scratch", "high_iops_state_with_explicit_backup"]
       deny_purposes: ["only-copy-of-truth", "vault_data", "secrets", "pki"]
       constraints:
-        must_have_replication: true
+        must_have_replication: false
       defaults:
         zfs:
           compression: "lz4"
           atime: "off"
           recordsize: "128K"
-          xattr: "sa"
-          acltype: "posixacl"
+          xattr: "on"
           sync: "standard"
           logbias: "throughput"
         snapshot_policy: "hourly_24_daily_14_weekly_8"
@@ -106,8 +104,7 @@ storage_contract:
           compression: "lz4"
           atime: "off"
           recordsize: "128K"
-          xattr: "sa"
-          acltype: "posixacl"
+          xattr: "on"
           sync: "standard"
           logbias: "latency"
         snapshot_policy: "daily_30_weekly_12_monthly_12"
@@ -128,8 +125,7 @@ storage_contract:
           compression: "lz4"
           atime: "off"
           recordsize: "1M"
-          xattr: "sa"
-          acltype: "posixacl"
+          xattr: "on"
           sync: "standard"
           logbias: "throughput"
         snapshot_policy: "daily_7_weekly_4"
@@ -150,7 +146,7 @@ storage_contract:
       keep: { daily: 7, weekly: 4 }
 
   # ============================================================
-  # DATA POLICIES (reusable ZFS policy blocks)
+  # DATA POLICIES (reuonble ZFS policy blocks)
   # ============================================================
   data_policies:
 
@@ -230,67 +226,70 @@ storage_contract:
 
     vault_data:
       tier: "secure"
-      namespace_path: "Secure/workloads/vault/{{ workload_id }}/raft"
+      namespace_path: "Secure/workloads/vault/__WORKLOAD_ID__/raft"
       policy: "vault_raft"
+      pve_storage: vault_data
 
     audit_logs:
       tier: "secure"
-      namespace_path: "Secure/logs/{{ workload_id }}"
+      namespace_path: "Secure/logs/__WORKLOAD_ID__"
       policy: "audit_logs"
+      pve_storage: audit_logs
 
     backups_target:
       tier: "secure"
-      namespace_path: "Secure/backups/{{ workload_id }}"
+      namespace_path: "Secure/backups/__WORKLOAD_ID__"
       policy: "backups_bulk"
+      pve_storage: backups
 
     databases:
       tier: "secure"
-      namespace_path: "Secure/workloads/databases/{{ workload_id }}"
+      namespace_path: "Secure/workloads/databases/__WORKLOAD_ID__"
       policy: "db_latency"
 
     identity:
       tier: "secure"
-      namespace_path: "Secure/workloads/identity/{{ workload_id }}"
+      namespace_path: "Secure/workloads/identity/__WORKLOAD_ID__"
       policy: "state_general"
 
     app_state:
       tier: "secure"
-      namespace_path: "Secure/workloads/app_state/{{ workload_id }}"
+      namespace_path: "Secure/workloads/app_state/__WORKLOAD_ID__"
       policy: "state_general"
 
     configs:
       tier: "secure"
-      namespace_path: "Secure/shared/configs/{{ workload_id }}"
+      namespace_path: "Secure/shared/configs/__WORKLOAD_ID__"
       policy: "configs_general"
 
     secrets:
       tier: "secure"
-      namespace_path: "Secure/shared/secrets/{{ workload_id }}"
+      namespace_path: "Secure/shared/secrets/__WORKLOAD_ID__"
       policy: "secrets_strict"
 
     pki:
       tier: "secure"
-      namespace_path: "Secure/shared/pki/{{ workload_id }}"
+      namespace_path: "Secure/shared/pki/__WORKLOAD_ID__"
       policy: "pki_strict"
 
     iac:
       tier: "secure"
-      namespace_path: "Secure/shared/iac/{{ workload_id }}"
+      namespace_path: "Secure/shared/iac/__WORKLOAD_ID__"
       policy: "configs_general"
 
     cache:
       tier: "nvme"
-      namespace_path: "nvme0n1/cache/{{ workload_id }}"
+      namespace_path: "nvme0n1/cache/__WORKLOAD_ID__"
       policy: "state_general"
 
     transcode:
       tier: "nvme"
-      namespace_path: "nvme0n1/transcode/{{ workload_id }}"
+      namespace_path: "nvme0n1/transcode/__WORKLOAD_ID__"
       policy: "state_general"
 
     scratch:
       tier: "nvme"
-      namespace_path: "nvme0n1/scratch/{{ workload_id }}"
+      namespace_path: "nvme0n1/scratch/__WORKLOAD_ID__"
       policy: "state_general"
 
     large_files:
@@ -326,7 +325,7 @@ storage_contract:
         - { purpose: "configs", min_size: "4G" }
         - { purpose: "pki",     min_size: "4G" }
       security:
-        encryption_required: true
+        encryption_required: false
         redundancy_required: true
 
     databases_postgres:

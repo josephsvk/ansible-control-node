@@ -1,0 +1,194 @@
+# roles/zfs_contract_apply_v1/tasks/main.yml
+
+- name: Guard disabled
+  ansible.builtin.meta: end_play
+  when: not zfs_contract_apply__enabled
+
+- name: Validate contract present
+  ansible.builtin.assert:
+    that:
+      - zfs_contract_apply__contract is mapping
+      - (zfs_contract_apply__contract.tiers is defined) or (zfs_contract_apply__contract.get('tiers') is defined)
+      - zfs_contract_apply__contract.purposes is defined
+      - zfs_contract_apply__contract.data_policies is defined
+    fail_msg: "storage_contract missing required keys: tiers, purposes, data_policies"
+
+- name: Load contract shortcuts
+  ansible.builtin.set_fact:
+    _c_tiers: "{{ zfs_contract_apply__contract.tiers }}"
+    _c_purposes: "{{ zfs_contract_apply__contract.purposes }}"
+    _c_policies: "{{ zfs_contract_apply__contract.data_policies }}"
+
+- name: Collect workload hosts from configured groups
+  ansible.builtin.set_fact:
+    _workload_hosts: "{{ (_workload_hosts | default([])) + (groups.get(item, []) | list) }}"
+  loop: "{{ zfs_contract_apply__workload_groups }}"
+
+- name: Normalize workload hosts list
+  ansible.builtin.set_fact:
+    _workload_hosts: "{{ _workload_hosts | flatten | unique | list }}"
+
+- name: Build dataset intents from host vars (vm_storage_plan)
+  ansible.builtin.set_fact:
+    _dataset_intents: "{{ (_dataset_intents | default([])) + _intents_from_host }}"
+  vars:
+    _h: "{{ item }}"
+    _hv: "{{ hostvars.get(_h, {}) }}"
+    _env: "{{ _hv.env | default(zfs_contract_apply__env_default) }}"
+    _name: "{{ _hv.name | default(_hv.vm_name | default(_h)) }}"
+    _workload_id: "{{ (_hv.workload_id | default('')) | trim }}"
+    _workload_type: "{{ _hv.workload.type | default('') }}"
+    _storage_plan: "{{ _hv.vm_storage_plan | default({}) }}"
+    _intents_from_host: >-
+      {{
+        _storage_plan
+        | dict2items
+        | map(attribute='value')
+        | selectattr('purpose', 'defined')
+        | selectattr('pool_ref', 'defined')
+        | list
+        | map('combine', {
+            'host': _h,
+            'env': _env,
+            'name': _name,
+            'workload_type': _workload_type,
+            'workload_id': (_workload_id if _workload_id|length>0 else (_workload_type ~ '-' ~ _env ~ '-' ~ _name))
+          })
+        | list
+      }}
+  loop: "{{ _workload_hosts }}"
+
+- name: Filter intents to managed tier(s) only
+  ansible.builtin.set_fact:
+    _dataset_intents: >-
+      {{
+        _dataset_intents
+        | selectattr('pool_ref', 'in', zfs_contract_apply__tiers)
+        | list
+      }}
+
+- name: Resolve dataset paths + policies from purposes
+  ansible.builtin.set_fact:
+    _desired_datasets: "{{ (_desired_datasets | default([])) + [ _resolved ] }}"
+  vars:
+    _purpose_key: "{{ item.purpose }}"
+    _purpose: "{{ _c_purposes[_purpose_key] }}"
+    _tier_key: "{{ _purpose.tier }}"
+    _ns_tmpl: "{{ _purpose.namespace_path | default('') }}"
+    _policy_key: "{{ _purpose.policy | default('') }}"
+    _policy: "{{ _c_policies.get(_policy_key, {}) }}"
+    _tier_defaults: "{{ _c_tiers[_tier_key].defaults.zfs | default({}) }}"
+    _policy_overrides: "{{ _policy.zfs_overrides | default({}) }}"
+    _dataset_path: >-
+      {{
+        (_ns_tmpl | default(''))
+        | replace('__WORKLOAD_ID__', item.workload_id)
+        | replace('__ENV__', item.env)
+        | replace('__NAME__', item.name)
+        | replace('__HOST__', item.host)
+      }}
+    _props: >-
+      {{
+        zfs_contract_apply__baseline_props
+        | combine(_tier_defaults, recursive=True)
+        | combine(_policy_overrides, recursive=True)
+      }}
+    _resolved:
+      dataset: "{{ _dataset_path }}"
+      tier: "{{ _tier_key }}"
+      purpose: "{{ _purpose_key }}"
+      policy: "{{ _policy_key }}"
+      props: "{{ _props }}"
+      props_items: "{{ _props | dict2items }}"
+  loop: "{{ _dataset_intents }}"
+  when:
+    - _c_purposes.get(item.purpose) is defined
+    - (_c_purposes[item.purpose].namespace_path | default('')) | length > 0
+
+- name: Drop empty dataset paths
+  ansible.builtin.set_fact:
+    _desired_datasets: "{{ _desired_datasets | selectattr('dataset','match','.+') | list }}"
+
+- name: Enforce managed prefixes
+  ansible.builtin.set_fact:
+    _desired_datasets: >-
+      {{
+        _desired_datasets
+        | selectattr(
+            'dataset',
+            'match',
+            '^(' ~ (zfs_contract_apply__managed_prefixes | map('regex_escape') | join('|')) ~ ')(/|$)'
+          )
+        | list
+      }}
+
+- name: Exclude system-managed prefixes
+  ansible.builtin.set_fact:
+    _desired_datasets: >-
+      {{
+        _desired_datasets
+        | rejectattr(
+            'dataset',
+            'match',
+            '^(' ~ (zfs_contract_apply__exclude_prefixes | map('regex_escape') | join('|')) ~ ')(/|$)'
+          )
+        | list
+      }}
+
+- name: Unique datasets (keep first)
+  ansible.builtin.set_fact:
+    _desired_datasets: "{{ _desired_datasets | unique(attribute='dataset') | list }}"
+
+# ------------------------------------------------------------
+# ZFS apply (non-destructive)
+# ------------------------------------------------------------
+
+- name: Ensure datasets exist
+  ansible.builtin.command:
+    argv: ["zfs", "list", "-H", "-o", "name", "{{ item.dataset }}"]
+  register: _zfs_list
+  changed_when: false
+  failed_when: false
+  loop: "{{ _desired_datasets }}"
+
+- name: Create missing datasets
+  ansible.builtin.command:
+    argv:
+      - "zfs"
+      - "create"
+      - "-p"
+      - "-o"
+      - "canmount={{ zfs_contract_apply__canmount_default }}"
+      - "-o"
+      - "mountpoint={{ zfs_contract_apply__mountpoint_default }}"
+      - "{{ item.item.dataset }}"
+  when:
+    - zfs_contract_apply__allow_create
+    - item.rc != 0
+  loop: "{{ _zfs_list.results }}"
+
+- name: Apply ZFS properties (policy-driven)
+  ansible.builtin.command:
+    argv: ["zfs", "set", "{{ item.1.key }}={{ item.1.value }}", "{{ item.0.dataset }}"]
+  register: _zfs_set
+  changed_when: true
+  failed_when: false
+  when: zfs_contract_apply__allow_property_changes
+  with_subelements:
+    - "{{ _desired_datasets }}"
+    - props_items
+
+- name: Report property-set failures
+  ansible.builtin.assert:
+    that:
+      - (_zfs_set.results | selectattr('rc','ne',0) | list | length) == 0
+    fail_msg: >-
+      Some zfs set operations failed. First failures:
+      {{
+        (_zfs_set.results
+          | selectattr('rc','ne',0)
+          | map(attribute='stderr')
+          | list
+        )[:5]
+      }}
+  when: zfs_contract_apply__allow_property_changes
