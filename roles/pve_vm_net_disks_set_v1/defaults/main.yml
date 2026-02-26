@@ -1,0 +1,13 @@
+---
+pve_bridge: vmbr0
+
+# Purpose -> PVE storage mapping (temporary hardcode)
+pve_purpose_storage_map:
+  vault_data: vault
+  audit_logs: logs
+  backups_target: backups
+
+# Fallback if purpose not mapped
+pve_default_disk_storage: Secure
+
+pve_qm_bin: /usr/sbin/qm

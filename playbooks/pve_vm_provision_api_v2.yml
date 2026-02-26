@@ -13,6 +13,9 @@
     - role: pve_clone_api_v3
       tags: ["step2"]
 
+    - role: pve_vm_net_disks_set_v1
+      tags: ["step3b"]
+
     - role: pve_vm_hw_set_v1
       tags: ["step3"]
     

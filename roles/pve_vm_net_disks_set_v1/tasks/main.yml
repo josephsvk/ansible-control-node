@@ -1,0 +1,62 @@
+---
+- name: Preflight | require vmid and pve_node
+  ansible.builtin.assert:
+    that:
+      - vmid is defined
+      - pve_node is defined
+    fail_msg: "Missing vmid or pve_node on VM object."
+  changed_when: false
+
+- name: Preflight | qm exists on pve_node
+  ansible.builtin.raw: "test -x {{ pve_qm_bin | default('/usr/sbin/qm') }} && echo QM_OK || (echo QM_MISSING && exit 2)"
+  changed_when: false
+  delegate_to: "{{ pve_node }}"
+
+- name: Preflight | sudo works non-interactively on pve_node
+  ansible.builtin.raw: "sudo -n true && echo SUDO_OK || (echo SUDO_FAIL && exit 3)"
+  changed_when: false
+  delegate_to: "{{ pve_node }}"
+
+- name: Preflight | VM exists (qm status)
+  ansible.builtin.raw: "sudo -n {{ pve_qm_bin | default('/usr/sbin/qm') }} status {{ vmid | int }}"
+  register: _qm_status
+  changed_when: false
+  delegate_to: "{{ pve_node }}"
+
+- name: Read current VM config (qm)
+  ansible.builtin.raw: "sudo -n {{ pve_qm_bin | default('/usr/sbin/qm') }} config {{ vmid | int }}"
+  register: _qm_cfg
+  changed_when: false
+  delegate_to: "{{ pve_node }}"
+
+- name: Set net0 bridge (qm)
+  ansible.builtin.raw: "sudo -n {{ pve_qm_bin | default('/usr/sbin/qm') }} set {{ vmid | int }} --net0 virtio,bridge={{ pve_bridge | default('vmbr0') }}"
+  when: _qm_cfg.stdout is not search('net0:.*bridge=' ~ (pve_bridge | default('vmbr0')))
+  delegate_to: "{{ pve_node }}"
+
+- name: Add SCSI disks from vm_storage_plan (qm)
+  ansible.builtin.raw: >-
+    sudo -n {{ pve_qm_bin | default('/usr/sbin/qm') }} set {{ vmid | int }}
+    --{{ item.key }}
+    {{
+      (pve_purpose_storage_map[item.value.purpose] | default(pve_default_disk_storage | default('Secure')))
+    }}:{{ (item.value.size | regex_replace('G$','') | int) }}
+  loop: "{{ (vm_storage_plan | default({})) | dict2items }}"
+  when:
+    - vm_storage_plan is defined
+    - item.key is match('^scsi[1-9]$')
+    - item.value is mapping
+    - item.value.purpose is defined
+    - item.value.size is defined
+    - _qm_cfg.stdout is not search('^' ~ item.key ~ ':', multiline=True)
+  delegate_to: "{{ pve_node }}"
+
+- name: Read VM config after changes (qm)
+  ansible.builtin.raw: "sudo -n {{ pve_qm_bin | default('/usr/sbin/qm') }} config {{ vmid | int }}"
+  register: _qm_cfg_after
+  changed_when: false
+  delegate_to: "{{ pve_node }}"
+
+- name: Debug | final net0 + scsi lines
+  ansible.builtin.debug:
+    msg: "{{ _qm_cfg_after.stdout_lines | select('match','^(net0:|scsi[0-9]:|ide2:|ipconfig0:)') | list }}"
