@@ -18,6 +18,52 @@
 
     - role: pve_vm_hw_set_v1
       tags: ["step3"]
-    
-    - role: root_to_normal
+
+# Add host to managed group after provisioning 
+
+- name: OS konfigurácia vo VM (s facts)
+  hosts: managed
+  gather_facts: true
+  become: true
+  become_method: sudo
+  collections:
+    - debops.debops
+
+  pre_tasks:
+   
+    - name: Ensure needrestart conf.d exists
+      ansible.builtin.file:
+        path: /etc/needrestart/conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
       tags: ["step4"]
+
+  roles:
+    - role: apt_install
+    - role: sudo
+    - role: .users
+    - role: ferm
+    - role: fail2ban
+    - role: unattended_upgrades
+    - role: apt_preferences
+    - role: pki
+    - role: resolved
+      tags: ["step4"]
+
+
+
+- name: devsec.hardening.os_hardening
+  hosts: managed
+  become: true
+  become_method: sudo
+  collections:
+    - devsec.hardening
+  roles:
+    - os_hardening
+    - ssh_hardening
+  tags: [hardening, "step5"]
+    
+
+

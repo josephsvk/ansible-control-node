@@ -1,0 +1,12 @@
+# Passwordless sudo for selected users
+sudo__rules:
+
+  - name: 'ansible-nopasswd'
+    users: [ 'ansible' ]
+    commands: [ 'ALL' ]
+    nopasswd: true
+
+  - name: 'joseph-sudo'
+    users: [ 'joseph' ]
+    commands: [ 'ALL' ]
+    nopasswd: false

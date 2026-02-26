@@ -66,3 +66,7 @@ ansible user > inštalacia klučov ssh
 # ping na hosta 
 
 ansible vm_testgoldimage -i inventories/lab/hosts.yml -m ping
+
+# insrall requirements 
+
+ansible-galaxy collection install -r collections/requirements.yml

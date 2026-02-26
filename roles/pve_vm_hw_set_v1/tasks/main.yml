@@ -79,9 +79,11 @@
   delegate_to: "{{ pve_node }}"
 
 # --- Network bridge (net0)
-- name: Set net0 bridge to pve_bridge (qm) via raw
-  ansible.builtin.raw: "qm set {{ vmid | int }} --net0 virtio,bridge={{ pve_bridge | default('vmbr0') }}"
-  when: _qm_cfg.stdout is not search('net0:.*bridge=' ~ (pve_bridge | default('vmbr0')))
+- name: Set net0 bridge + MAC (qm) via raw
+  ansible.builtin.raw: >-
+    qm set {{ vmid | int }}
+    --net0 virtio={{ vm_mac }},bridge={{ pve_bridge | default('vmbr0') }}
+  when: _qm_cfg.stdout is not search('net0:.*virtio=' ~ (vm_mac | lower))
   delegate_to: "{{ pve_node }}"
 
 # --- Disks (scsi1..9)

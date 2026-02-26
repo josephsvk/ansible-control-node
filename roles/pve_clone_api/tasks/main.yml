@@ -44,6 +44,7 @@
     - _clone is failed
     - "'already exists' not in (_clone.msg | default('') | lower)"
 
+
 # 2) Configure cloud-init identity (API update)
 - name: Configure cloud-init (API)
   community.proxmox.proxmox_kvm:

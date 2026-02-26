@@ -2,7 +2,7 @@
 # Minimal Vault VM intent using the enterprise contract
 
 #env: "prod"
-
+#ansible_host: vault1.joseph4lansolo.xyz
 pve_node: pve
 vmid: 202
 vm_name: vault1
@@ -39,3 +39,36 @@ vm_storage_plan:
     purpose: "backups_target"
     pool_ref: "secure"
     size: "64G"
+
+# --- OS HARDENING (devsec.hardening.os_hardening) ----------------------------
+
+ufw_manage_rules: true
+ufw_rules:
+  # Vault API iba z “access/app” segmentu alebo z reverse proxy
+  - rule: allow
+    port: "8200"
+    proto: tcp
+    from_ip: "10.10.10.0/24"       # apps/proxy (príklad)
+
+# --- SSH HARDENING (devsec.hardening.ssh_hardening) --------------------------
+
+# Root login cez SSH zakázať (pre Vault VM žiadny dôvod nechávať).
+ssh_permit_root_login: "no"
+
+# Password auth vypnúť (kľúče alebo SSH CA). Toto je najväčšia praktická zmena.
+ssh_password_authentication: "no"
+
+# Znížiť okno na bruteforce + rýchle odpojenie mŕtvych session.
+ssh_max_auth_retries: 3
+ssh_login_grace_time: 20
+ssh_client_alive_interval: 300
+ssh_client_alive_count_max: 1
+
+# Server nech nečaká na DNS (zrýchlenie + menej závislostí).
+ssh_use_dns: "no"
+
+# --- ANSIBLE RUNTIME (odstráni warning remote_tmp) ----------------------------
+
+# Toto nie je devsec, ale priamo z tvojho výpisu: Ansible si vytvára /root/.ansible/tmp.
+# Fixni to host_varom, aby remote_tmp išlo do user home (a nie do /root).
+ansible_remote_tmp: "/tmp/.ansible-${USER}/tmp"

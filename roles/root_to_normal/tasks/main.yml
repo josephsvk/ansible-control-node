@@ -1,4 +1,13 @@
 ---
+- name: Gather facts when missing
+  ansible.builtin.setup:
+    gather_subset:
+      - '!all'
+      - 'min'
+      - 'distribution'
+  when: ansible_facts.os_family is not defined
+  changed_when: false
+
 # roles/root_to_normal/tasks/main.yml
 - name: Preflight - users_manage must be defined and a list
   ansible.builtin.assert:
@@ -30,7 +39,7 @@
     state: present
     update_cache: true
   when: ansible_facts.os_family == "Debian"
-  become: "{{ (ansible_user_id != 'root') | bool }}"
+  become: true
   tags: [bootstrap]
 
 # Step 3 > Users
@@ -41,16 +50,38 @@
     state: present
   loop: "{{ (users_manage | map(attribute='groups') | list | flatten | unique) | default([]) }}"
 
-- name: Create users
+- name: Read passwd database
+  ansible.builtin.getent:
+    database: passwd
+  become: true
+
+- name: Fail on UID collisions (except same user)
+  ansible.builtin.assert:
+    that:
+      - item.uid is not defined
+        or (getent_passwd | dict2items | selectattr('value.1','equalto', item.uid|string) | list | length == 0)
+        or (getent_passwd | dict2items | selectattr('value.1','equalto', item.uid|string) | map(attribute='key') | first == item.name)
+    fail_msg: "UID {{ item.uid }} is already used by another user in VM; fix users_manage/template."
+  loop: "{{ users_manage }}"
+  loop_control:
+    label: "{{ item.name }}"
+    
+- name: Detect remote login user
+  ansible.builtin.command: id -un
+  register: _login_user
+  changed_when: false
+
+- name: Create/Update users (safe for current login)
   ansible.builtin.user:
     name: "{{ item.name }}"
-    uid: "{{ item.uid | default(omit) }}"
-    groups: "{{ item.groups | default(omit) }}"
-    append: true
+    uid: "{{ (omit if item.name == _login_user.stdout else (item.uid | default(omit))) }}"
     shell: "{{ item.shell | default('/bin/bash') }}"
+    groups: "{{ item.groups | default([]) }}"
+    append: true
     create_home: "{{ item.create_home | default(true) }}"
     state: present
   loop: "{{ users_manage }}"
+  become: true
 
 - name: Configure passwordless sudo for selected users
   ansible.builtin.copy:

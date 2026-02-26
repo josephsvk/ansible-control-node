@@ -1,15 +1,16 @@
----
-users_manage:
-  - name: ansible
-    uid: 1100
-    groups: [sudo]
-    shell: /bin/bash
-    create_home: true
-    sudo_nopasswd: true
+users__accounts:
 
-  - name: joseph
-    uid: 1000
-    groups: [sudo]
-    shell: /bin/bash
+  - name: 'joseph'
+    local: false
+    uid: 1099
+    group: 'joseph'
+    groups: [ 'sudo' ]
+    shell: '/bin/bash'
+    home: '/home/joseph'
     create_home: true
-    sudo_nopasswd: false
+    state: 'present'
+
+users__groups:
+  - name: 'sudo'
+    local: false
+    state: 'present'
