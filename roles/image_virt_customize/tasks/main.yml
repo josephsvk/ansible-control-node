@@ -59,6 +59,17 @@
     cmd: "virt-customize -a {{ cloud_image_customized_path }} --run-command 'cloud-init clean --logs || true'"
   when: virt_customize_clean_cloud_init | bool and (virt_customize_force_rebuild | bool or not _custom_stat.stat.exists)
 
+- name: Reset machine identity and network state
+  command: >
+    virt-customize -a {{ cloud_image_customized_path }}
+    --run-command 'truncate -s 0 /etc/machine-id'
+    --run-command 'rm -f /var/lib/dbus/machine-id'
+    --run-command 'rm -f /var/lib/systemd/random-seed'
+    --run-command 'rm -f /etc/ssh/ssh_host_*'
+    --run-command 'rm -f /var/lib/dhcp/*'
+    --run-command 'cloud-init clean --logs || true'
+  changed_when: true
+
 - name: Clean logs + temp
   ansible.builtin.shell: |
     set -euo pipefail

@@ -1,6 +1,6 @@
 ---
 - name: Proxmox golden image v1
-  hosts: pve_nodes
+  hosts: pve_templates
   become: true
   gather_facts: false
 
