@@ -60,3 +60,4 @@
 - name: Debug | final net0 + scsi lines
   ansible.builtin.debug:
     msg: "{{ _qm_cfg_after.stdout_lines | select('match','^(net0:|scsi[0-9]:|ide2:|ipconfig0:)') | list }}"
+

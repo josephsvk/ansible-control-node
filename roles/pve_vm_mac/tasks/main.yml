@@ -1,0 +1,43 @@
+# --- Guest side: force DHCP client-id (Option 61) via systemd-networkd ---
+
+- name: Gather network facts on guest (needed for interface name)
+  ansible.builtin.setup:
+    gather_subset:
+      - network
+  when: ansible_facts.default_ipv4 is not defined
+
+- name: Compute primary interface name (fallback-safe)
+  ansible.builtin.set_fact:
+    _primary_if: >-
+      {{
+        (ansible_facts.default_ipv4.interface
+          if (ansible_facts.default_ipv4 is defined and ansible_facts.default_ipv4.interface is defined)
+          else
+          ((ansible_facts.interfaces | default([])) | reject('equalto','lo') | list | first)
+        )
+      }}
+  changed_when: false
+
+- name: Ensure systemd-networkd config dir exists
+  ansible.builtin.file:
+    path: /etc/systemd/network
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Configure DHCPv4 ClientIdentifier=mac (systemd-networkd)
+  ansible.builtin.copy:
+    dest: /etc/systemd/network/99-dhcp-clientid.network
+    mode: "0644"
+    content: |
+      [Match]
+      Name={{ _primary_if }}
+
+      [Network]
+      DHCP=yes
+
+      [DHCPv4]
+      ClientIdentifier=mac
+  become: true
+  notify: restart systemd-networkd
+  when: _primary_if is defined and (_primary_if | length) > 0

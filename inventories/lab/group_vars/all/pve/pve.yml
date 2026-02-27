@@ -1,0 +1,19 @@
+# API endpoint (môže byť jeden node alebo VIP)
+ansible_host: pve.joseph4lansolo.xyz
+pve_api_host: pve.joseph4lansolo.xyz
+pve_api_port: 8006
+pve_api_user: "ansible@pve"
+pve_api_token_id: "ansible"
+pve_api_token_secret: "{{ vault_pve_token_secret }}"
+pve_api_validate_certs: false
+
+ansible_user: ansible
+ansible_port: 22
+
+pve_node_name: pve
+pve_default_storage: local-zfs
+
+pve_storage_images: local-zfs
+pve_storage_snippets: VM
+
+ansible_ssh_common_args: "-o IdentitiesOnly=yes"

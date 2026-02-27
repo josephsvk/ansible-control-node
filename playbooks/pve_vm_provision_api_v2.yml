@@ -19,6 +19,9 @@
     - role: pve_vm_hw_set_v1
       tags: ["step3"]
 
+    - role: pve_vm_mac
+      tags: ["step3c"]
+
 # Add host to managed group after provisioning 
 
 - name: OS konfigurácia vo VM (s facts)

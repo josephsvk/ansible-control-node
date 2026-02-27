@@ -1,0 +1,7 @@
+# roles/pve_vm_mac/handlers/main.yml
+---
+- name: restart systemd-networkd
+  ansible.builtin.service:
+    name: systemd-networkd
+    state: restarted
+  become: true
