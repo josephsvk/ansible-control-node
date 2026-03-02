@@ -4,3 +4,5 @@ collections:
   - name: community.proxmox
   - name: devsec.hardening
   - name: debops.debops
+  #- name: linux-system-roles.storage
+  - name: mila.proxmox

@@ -10,7 +10,7 @@
     - role: ssh_key_gen_v1
       tags: ["step1"]
       
-    - role: pve_clone_api_v3
+    - role: pve_clone_api_v4
       tags: ["step2"]
 
     - role: pve_vm_net_disks_set_v1

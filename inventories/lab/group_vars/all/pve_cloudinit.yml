@@ -1,0 +1,41 @@
+# =========================
+# Proxmox API (prefer token)
+# =========================
+pve_api:
+  host: "pve.joseph4lansolo.xyz"
+  user: "ansible@pve"
+  token_id: "ansible"
+  token_secret: "{{ vault_pve_token_secret }}"
+  validate_certs: false
+
+# =========================
+# Default VM provisioning
+# =========================
+pve_vm_defaults:
+  node: "pve"
+  onboot: true
+  agent: true
+
+  # Network (vmbr10 + DHCP)
+  bridge: "vmbr10"
+  vlan_tag: null           # alebo číslo VLAN, ak chceš tagovať
+  model: "virtio"
+
+  # Cloud-init defaults
+  ci:
+    enabled: true
+    storage: "local"       # storage, kde existuje "cloudinit" (napr. local-lvm/local)
+    format: "qcow2"         # voliteľné, podľa storage backendu
+    user: "ansible"
+    password: null          # nechaj null, keď ideš len SSH kľúčom
+    sshkeys: "{{ vault_ci_ssh_pubkeys | default('') }}"
+    ipconfig0: "ip=dhcp"    # alebo "ip=dhcp,ip6=auto"
+    nameservers: []         # prázdne = nechať na DHCP
+    searchdomains: []       # prázdne = nechať na DHCP
+
+# =========================
+# Module argument mapping helpers
+# (použi priamo v tasku)
+# =========================
+pve_vm_cloudinit_ide2: >-
+  {{ pve_vm_defaults.ci.storage }}:cloudinit,format={{ pve_vm_defaults.ci.format }}

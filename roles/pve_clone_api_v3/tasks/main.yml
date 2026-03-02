@@ -80,6 +80,7 @@
       name: "{{ vm_name }}"
       full: "{{ 1 if (pve_clone_full | default(true) | bool) else 0 }}"
       target: "{{ _pve_node }}"
+      
     status_code: [200]
   delegate_to: localhost
   register: _clone_job
@@ -153,7 +154,7 @@
     update: true
     ciuser: "{{ _ciuser }}"
     ipconfig:
-      ipconfig0: "{{ _ipconfig0 }}"
+      ipconfig0: "{{ _ipconfig0 }}"cluster
     searchdomains:
       - "{{ _domain }}"
     sshkeys: "{{ _ssh_pubkey }}"

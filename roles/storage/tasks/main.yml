@@ -1,0 +1,156 @@
+---
+# roles/storage/tasks/main.yml
+# ============================================================
+# GUEST-ONLY STORAGE APPLY (simple, deterministic)
+#
+# Source of truth:
+#   - vm_storage_plan keys: scsi1/scsi2/scsi3  => expected SERIAL drive-scsi1/2/3
+#   - storage_contract.purposes[plan.purpose]  => guest_mount, fs, label
+#
+# No rescan. No heuristics. No extra debug.
+# ============================================================
+
+- name: Build plan items (dict2items)
+  ansible.builtin.set_fact:
+    _plan_items: "{{ (vm_storage_plan | default({})) | dict2items }}"
+  changed_when: false
+
+- name: Build normalized plan list
+  ansible.builtin.set_fact:
+    plan_norm: "{{ plan_norm | default([]) + [ _one ] }}"
+  vars:
+    _disk_key: "{{ item.key }}"
+    _purpose: "{{ item.value.purpose }}"
+    _one:
+      disk_key: "{{ _disk_key }}"
+      purpose: "{{ _purpose }}"
+      expected_serial: "drive-{{ _disk_key }}"
+      preferred_index: "{{ (_disk_key | regex_replace('^scsi','')) | int }}"
+  loop: "{{ _plan_items }}"
+  loop_control:
+    label: "{{ item.key }} -> {{ item.value.purpose }}"
+  changed_when: false
+
+- name: Assert plan not empty
+  ansible.builtin.assert:
+    that:
+      - _plan_items | length > 0
+    fail_msg: "vm_storage_plan is empty or missing"
+  changed_when: false
+
+- name: Assert every plan purpose exists in contract
+  ansible.builtin.assert:
+    that:
+      - item.purpose is defined
+      - storage_contract.purposes[item.purpose] is defined
+  loop: "{{ plan_norm }}"
+  loop_control:
+    label: "{{ item.disk_key }} -> {{ item.purpose }}"
+  changed_when: false
+
+- name: Build resolved mount spec (from plan + contract)
+  ansible.builtin.set_fact:
+    storage_mount_spec: >-
+      {{
+        storage_mount_spec | default([]) + [
+          (storage_contract.purposes[item.purpose]
+            | combine({
+                'purpose': item.purpose,
+                'disk_key': item.disk_key,
+                'expected_serial': item.expected_serial,
+                'preferred_index': item.preferred_index
+              }, recursive=True)
+          )
+        ]
+      }}
+  loop: "{{ plan_norm }}"
+  changed_when: false
+
+- name: Assert required contract fields exist
+  ansible.builtin.assert:
+    that:
+      - item.guest_mount is defined
+      - item.label is defined
+      - item.fs is defined
+      - item.fs.fstype is defined
+    fail_msg: "Contract entry incomplete for purpose={{ item.purpose }}: {{ item }}"
+  loop: "{{ storage_mount_spec }}"
+  loop_control:
+    label: "{{ item.purpose }}"
+  changed_when: false
+
+- name: Read lsblk (NAME SERIAL) as root
+  ansible.builtin.command: lsblk -o NAME,SERIAL -n
+  become: true
+  register: _lsblk
+  changed_when: false
+
+- name: Build disk map SERIAL -> /dev/NAME (only drive-scsiX)
+  ansible.builtin.set_fact:
+    _disks_by_serial: "{{ _disks_by_serial | default({}) | combine({ _serial: _dev }) }}"
+  vars:
+    _cols: "{{ item.split() }}"
+    _name: "{{ _cols[0] }}"
+    _serial: "{{ _cols[1] }}"
+    _dev: "/dev/{{ _name }}"
+  loop: "{{ _lsblk.stdout_lines }}"
+  when:
+    - item.split() | length >= 2
+    - _serial is match('^drive-scsi[0-9]+$')
+  changed_when: false
+
+- name: Attach resolved dev path to mount spec
+  ansible.builtin.set_fact:
+    storage_mount_spec_resolved: >-
+      {{
+        storage_mount_spec_resolved | default([]) + [
+          item | combine({
+            'dev': (_disks_by_serial[item.expected_serial] | default(''))
+          })
+        ]
+      }}
+  loop: "{{ storage_mount_spec }}"
+  loop_control:
+    label: "{{ item.guest_mount }} <- {{ item.expected_serial }}"
+  changed_when: false
+
+- name: Assert all devices resolved
+  ansible.builtin.assert:
+    that:
+      - item.dev | length > 0
+    fail_msg: "Missing disk: expected={{ item.expected_serial }} known={{ _disks_by_serial.keys() | list }}"
+  loop: "{{ storage_mount_spec_resolved }}"
+  loop_control:
+    label: "{{ item.purpose }} -> {{ item.guest_mount }}"
+  changed_when: false
+
+- name: Ensure mountpoints exist
+  ansible.builtin.file:
+    path: "{{ item.guest_mount }}"
+    state: directory
+    owner: "{{ storage_mount_owner | default('vault') }}"
+    group: "{{ storage_mount_group | default('vault') }}"
+    mode: "{{ storage_mount_mode | default('0750') }}"
+  loop: "{{ storage_mount_spec_resolved }}"
+  loop_control:
+    label: "{{ item.guest_mount }}"
+
+- name: Create filesystem with label (idempotent)
+  ansible.builtin.filesystem:
+    fstype: "{{ item.fs.fstype }}"
+    dev: "{{ item.dev }}"
+    opts: "-L {{ item.label }}"
+  loop: "{{ storage_mount_spec_resolved }}"
+  loop_control:
+    label: "{{ item.label }} on {{ item.dev }}"
+
+- name: Mount by LABEL (stable)
+  ansible.builtin.mount:
+    path: "{{ item.guest_mount }}"
+    src: "LABEL={{ item.label }}"
+    fstype: "{{ item.fs.fstype }}"
+    opts: "{{ item.fs.opts | default('defaults,noatime') }}"
+    state: mounted
+  loop: "{{ storage_mount_spec_resolved }}"
+  loop_control:
+    label: "{{ item.guest_mount }}"

@@ -1,0 +1,9 @@
+---
+- name: Provision VM(s) from template via Proxmox API (v2)
+  hosts: pve_instances
+  gather_facts: false
+
+  roles:
+      
+    - role: pve_clone_api_v4
+      tags: ["step2"]

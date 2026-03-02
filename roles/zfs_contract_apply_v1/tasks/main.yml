@@ -45,7 +45,6 @@
         | dict2items
         | map(attribute='value')
         | selectattr('purpose', 'defined')
-        | selectattr('pool_ref', 'defined')
         | list
         | map('combine', {
             'host': _h,
@@ -58,6 +57,37 @@
       }}
   loop: "{{ _workload_hosts }}"
 
+- name: Normalize intents accumulator init
+  ansible.builtin.set_fact:
+    _dataset_intents_norm: []
+
+- name: Normalize intents (derive pool_ref=tier from purpose when missing)
+  ansible.builtin.set_fact:
+    _dataset_intents_norm: >-
+      {{
+        _dataset_intents_norm
+        + [
+            intent | combine({
+              'pool_ref': (
+                intent.pool_ref
+                | default(_c_purposes.get(intent.purpose, {}).get('tier', ''))
+              )
+            })
+          ]
+      }}
+  loop: "{{ _dataset_intents | default([]) }}"
+  loop_control:
+    loop_var: intent
+    label: "{{ intent.host | default('') }}:{{ intent.purpose | default('') }}"
+
+- name: Replace dataset intents with normalized
+  ansible.builtin.set_fact:
+    _dataset_intents: "{{ _dataset_intents_norm }}"
+
+- name: Cleanup normalize temp
+  ansible.builtin.set_fact:
+    _dataset_intents_norm: null
+
 - name: Filter intents to managed tier(s) only
   ansible.builtin.set_fact:
     _dataset_intents: >-
@@ -67,25 +97,29 @@
         | list
       }}
 
+- name: Debug intents after filter
+  ansible.builtin.debug:
+    var: _dataset_intents
+
 - name: Resolve dataset paths + policies from purposes
   ansible.builtin.set_fact:
     _desired_datasets: "{{ (_desired_datasets | default([])) + [ _resolved ] }}"
   vars:
-    _purpose_key: "{{ item.purpose }}"
+    _purpose_key: "{{ intent.purpose }}"
     _purpose: "{{ _c_purposes[_purpose_key] }}"
     _tier_key: "{{ _purpose.tier }}"
     _ns_tmpl: "{{ _purpose.namespace_path | default('') }}"
     _policy_key: "{{ _purpose.policy | default('') }}"
     _policy: "{{ _c_policies.get(_policy_key, {}) }}"
-    _tier_defaults: "{{ _c_tiers[_tier_key].defaults.zfs | default({}) }}"
+    _tier_defaults: "{{ (_c_tiers[_tier_key].defaults.zfs | default({})) if (_c_tiers.get(_tier_key) is mapping) else {} }}"
     _policy_overrides: "{{ _policy.zfs_overrides | default({}) }}"
     _dataset_path: >-
       {{
         (_ns_tmpl | default(''))
-        | replace('__WORKLOAD_ID__', item.workload_id)
-        | replace('__ENV__', item.env)
-        | replace('__NAME__', item.name)
-        | replace('__HOST__', item.host)
+        | replace('__WORKLOAD_ID__', intent.workload_id)
+        | replace('__ENV__', intent.env)
+        | replace('__NAME__', intent.name)
+        | replace('__HOST__', intent.host)
       }}
     _props: >-
       {{
@@ -94,16 +128,28 @@
         | combine(_policy_overrides, recursive=True)
       }}
     _resolved:
+      host: "{{ intent.host }}"
       dataset: "{{ _dataset_path }}"
       tier: "{{ _tier_key }}"
       purpose: "{{ _purpose_key }}"
       policy: "{{ _policy_key }}"
       props: "{{ _props }}"
       props_items: "{{ _props | dict2items }}"
+
+      # purpose metadata (for later qm/mount roles)
+      pve_storage: "{{ _purpose.pve_storage | default('') }}"
+      guest_mount: "{{ _purpose.guest_mount | default('') }}"
+      fs: "{{ _purpose.fs | default({}) }}"
+      label: "{{ _purpose.label | default('') }}"
+      preferred_bus: "{{ _purpose.preferred_bus | default('') }}"
+      preferred_index: "{{ _purpose.preferred_index | default(omit) }}"
   loop: "{{ _dataset_intents }}"
+  loop_control:
+    loop_var: intent
+    label: "{{ intent.host }}:{{ intent.purpose }}"
   when:
-    - _c_purposes.get(item.purpose) is defined
-    - (_c_purposes[item.purpose].namespace_path | default('')) | length > 0
+    - _c_purposes.get(intent.purpose) is defined
+    - (_c_purposes[intent.purpose].namespace_path | default('')) | length > 0
 
 - name: Drop empty dataset paths
   ansible.builtin.set_fact:
@@ -138,6 +184,8 @@
 - name: Unique datasets (keep first)
   ansible.builtin.set_fact:
     _desired_datasets: "{{ _desired_datasets | unique(attribute='dataset') | list }}"
+
+
 
 # ------------------------------------------------------------
 # ZFS apply (non-destructive)
@@ -192,3 +240,20 @@
         )[:5]
       }}
   when: zfs_contract_apply__allow_property_changes
+
+- name: Build resolved volumes per host (safe)
+  ansible.builtin.set_fact:
+    zfs_contract_apply__volumes_by_host: >-
+      {{
+        dict(
+          (_desired_datasets | default([]))
+          | selectattr('host', 'defined')
+          | rejectattr('host', 'equalto', '')
+          | groupby('host')
+          | map('list')
+        )
+      }}
+
+- name: Debug volumes by host
+  ansible.builtin.debug:
+    var: zfs_contract_apply__volumes_by_host

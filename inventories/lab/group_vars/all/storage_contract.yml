@@ -164,6 +164,7 @@ storage_contract:
         logbias: "latency"
       snapshot_policy: "hourly_48_daily_30_weekly_12_monthly_12"
 
+
     db_latency:
       zfs_overrides:
         recordsize: "16K"
@@ -229,18 +230,42 @@ storage_contract:
       namespace_path: "Secure/workloads/vault/__WORKLOAD_ID__/raft"
       policy: "vault_raft"
       pve_storage: vault_data
+      guest_mount: "/var/lib/vault"
+      fs:
+        fstype: "ext4"
+        opts: "defaults,noatime"
+      label: "VAULTDATA"
+      serial: "VAULTDATA"
+      preferred_bus: "scsi"
+      preferred_index: 1
 
     audit_logs:
       tier: "secure"
       namespace_path: "Secure/logs/__WORKLOAD_ID__"
       policy: "audit_logs"
       pve_storage: audit_logs
+      guest_mount: "/var/log/vault-audit"
+      fs:
+        fstype: "ext4"
+        opts: "defaults,noatime"
+      label: "VAULTAUDIT"
+      serial: "VAULTAUDIT"
+      preferred_bus: "scsi"
+      preferred_index: 2
 
     backups_target:
       tier: "secure"
       namespace_path: "Secure/backups/__WORKLOAD_ID__"
       policy: "backups_bulk"
       pve_storage: backups
+      guest_mount: "/srv/vault-backups"
+      fs:
+        fstype: "ext4"
+        opts: "defaults,noatime"
+      label: "VAULTBACKUP"
+      serial: "VAULTBACKUP"
+      preferred_bus: "scsi"
+      preferred_index: 3
 
     databases:
       tier: "secure"
@@ -374,6 +399,10 @@ storage_contract:
   # RESOLUTION RULES (how automation should resolve a request)
   # ============================================================
   resolution:
+
+    disk_identity:
+      method: "pve_serial"
+      serial_template: "__PURPOSE__"
 
     # If a purpose defines namespace_path, create/ensure dataset exists.
     # If null, the storage is managed by Proxmox storage root (or external tier).

@@ -52,3 +52,5 @@ zfs_contract_apply__baseline_props:
 zfs_platform_profile:
   xattr: "on"
   acltype: "posix"
+
+storage_contract: "inventories/lab/group_vars/all/storage_contract.yml" 

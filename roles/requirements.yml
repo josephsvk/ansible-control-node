@@ -1,3 +1,7 @@
 ---
 - src: geerlingguy.ntp
 - src: lae.proxmox
+- src: https://github.com/ansible-community/ansible-vault.git
+  name: ansible-community.ansible-vault
+  scm: git
+  version: master

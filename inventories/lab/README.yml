@@ -1,0 +1,177 @@
+# inventories/lab/hosts.yml
+# Zásada:
+# - pve_vms: iba "object" definície pre Proxmox (nepoužívať ansible_host/SSH)
+# - managed: iba reálne stroje s IP+SSH (ansible_host, ansible_user, ssh key, become)
+# - rovnaké meno hostu môže existovať v pve_vms aj managed (napr. vault1),
+#   ale premenné musia byť striktne oddelené do host_vars podľa účelu.
+
+all:
+  children:
+
+    # =========================
+    # HashiCorp Vault (role targeting)
+    # =========================
+    vault_servers:
+      # group_vars/vault_servers.yml:
+      #   - vault role vars (cluster name, listeners, storage backend, tls paths, policies)
+      # host_vars/vault1.yml (managed):
+      #   - IP/SSH + host špecifiká (disk mountpoints, NIC names, env)
+      hosts:
+        vault1: {}
+
+    # =========================
+    # Mount management
+    # - definície exportov na NFS serveri
+    # - definície mountov na klientoch (workloads_* groups)
+    # =========================
+    nfs_server:
+      # group_vars/nfs_server.yml:
+      #   - exports (paths, CIDR, options), firewall allowlist
+      # host_vars/pve.yml (managed):
+      #   - export roots (ZFS datasets), interface binding, server identity
+      hosts:
+        pve: {}
+
+    workloads_media_access:
+      # group_vars/workloads_media_access.yml:
+      #   - mount klienta: čo mountovať z Media tier (RO/RW), kde mountpointy
+      # host_vars/<client>.yml:
+      #   - per-host override (napr. inú cestu, iné options)
+      hosts: {}
+
+    workloads_media_management:
+      # group_vars/workloads_media_management.yml:
+      #   - mount klienta: management mounty (RW), prípadne tooling (rsync, borg, restic)
+      hosts: {}
+
+    workloads_secure_access:
+      # group_vars/workloads_secure_access.yml:
+      #   - mount klienta: Secure tier (striktnejšie options, noexec/nodev/nosuid kde dáva zmysel)
+      hosts:
+        aufik: {}
+
+    # =========================
+    # Proxmox nodes (reálne stroje)
+    # =========================
+    pve_nodes:
+      # group_vars/pve_nodes.yml:
+      #   - pve_api endpoint defaults, paths (/usr/sbin/qm), storage backends, bridge defaults
+      # host_vars/pve.yml (managed):
+      #   - ansible_host, ansible_user, become, plus node špecifiká (vmbr map, pools)
+      hosts:
+        pve: {}
+
+    # =========================
+    # Proxmox VM definície (NEPRIPÁJAŤ SA SSH)
+    # - slúžia len ako "objects" pre qm/API
+    # - sem patria VM parametre: vmid, pve_node, template, hw, disks, cloud-init meta
+    # =========================
+    pve_vms:
+      children:
+
+        # ---- Templates (qm template objekty)
+        pve_templates:
+          # group_vars/pve_templates.yml:
+          #   - spoločné defaults pre template manažment (cloud-init snippets, tags, notes)
+          children:
+            haos_templates:
+              # group_vars/haos_templates.yml:
+              #   - HAOS špecifiká (bios/machine, disk bus, serial/uefi)
+              hosts:
+                tpl_haos_17:
+                  # host_vars/tpl_haos_17.yml (pve_vms):
+                  #   - vmid, pve_node, source image, storage target, qm params pre template
+                  {}
+
+            debian_templates:
+              # group_vars/debian_templates.yml:
+              #   - Debian template defaults (cloud-init, qemu-guest-agent, ssh keys injection)
+              hosts:
+                tpl_debian_12:
+                  # host_vars/tpl_debian_12.yml (pve_vms):
+                  #   - vmid, pve_node, base image/template details
+                  {}
+
+        # ---- Instances (VM ktoré klonuješ/deployuješ)
+        pve_instances:
+          # group_vars/pve_instances.yml:
+          #   - spoločné defaults pre VM inštancie (cpu/mem defaults, tags, boot order)
+          children:
+            haos_instances:
+              hosts:
+                vm_haos_duko:
+                  # host_vars/vm_haos_duko.yml (pve_vms):
+                  #   - vmid, pve_node, clone_from template, net0, disk layout, cloud-init meta
+                  {}
+
+            debian_instances:
+              hosts:
+                aufik:
+                  # host_vars/aufik.yml (pve_vms):
+                  #   - vmid, pve_node, clone_from=tpl_debian_12
+                  #   - vm_mac, vm_bridge/vlan, vm_storage_plan (scsi1..), serial tags
+                  {}
+                vault1:
+                  # host_vars/vault1.yml (pve_vms OBJECT SECTION):
+                  #   - vmid, pve_node, clone_from=tpl_debian_12
+                  #   - vm_mac, vm_bridge/vlan
+                  #   - vm_storage_plan: scsi1..scsi3 (vault_data/audit_logs/backups_target)
+                  #   - qm args: scsihw, iothread, discard, cache, boot, agent
+                  {}
+
+    # =========================
+    # SSH-managed hosts (reálne OS, kam sa Ansible pripája)
+    # - ansible_host/ssh/become patria sem
+    # =========================
+    managed:
+      children:
+
+        pve_managed:
+          # group_vars/pve_managed.yml:
+          #   - common SSH settings, become defaults, baseline hardening pre lab
+          hosts:
+            pve: {}
+            debiantclv1: {}
+            aufik: {}
+            vault1: {}
+
+        vps:
+          # group_vars/vps.yml: wireguard endpoints, firewall baseline, backups
+          hosts: {}
+
+        servers:
+          hosts: {}
+
+        workstations:
+          hosts: {}
+
+        # VM po deployi (keď už majú sieť a SSH)
+        vms_ssh:
+          children:
+            haos_vms_ssh:
+              # typicky sa nemapuje cez SSH (HAOS), nechaj len ak máš špeciálny prístup
+              hosts:
+                homeassistant_duko: {}
+
+            debian_vms_ssh:
+              hosts:
+                testgoldimage: {}
+
+    # =========================
+    # WireGuard skupiny (cieľové stroje s reálnou konektivitou)
+    # =========================
+    wg_servers:
+      # group_vars/wg_servers.yml:
+      #   - server interface, allowedips policies, peers registry
+      hosts:
+        vps_hetz_1: {}
+
+    wg2_media_peers:
+      # group_vars/wg2_media_peers.yml:
+      #   - peers, AllowedIPs pre MEDIA segment
+      hosts: {}
+
+    wg3_mgmt_peers:
+      # group_vars/wg3_mgmt_peers.yml:
+      #   - peers, AllowedIPs pre MGMT segment
+      hosts: {}

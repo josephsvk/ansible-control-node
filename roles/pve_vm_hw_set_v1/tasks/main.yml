@@ -9,33 +9,6 @@
       }}
   changed_when: false
 
-# ---------- NEW: map purpose -> pve storage name ----------
-- name: Build scsi dict from vm_storage_plan (purpose -> storage)
-  ansible.builtin.set_fact:
-    _pve_scsi: >-
-      {{
-        _pve_scsi | default({}) |
-        combine({
-          item.key: (
-            (
-              "vault"   if item.value.purpose == "vault_data" else
-              "logs"    if item.value.purpose == "audit_logs" else
-              "backups" if item.value.purpose == "backups_target" else
-              "Secure"
-            )
-            ~ ":" ~ (item.value.size | regex_replace("G$", "") | int)
-          )
-        })
-      }}
-  loop: "{{ (vm_storage_plan | default({})) | dict2items }}"
-  when:
-    - vm_storage_plan is defined
-    - item.key is match('^scsi[1-9]$')
-    - item.value is mapping
-    - item.value.size is defined
-    - item.value.purpose is defined
-  changed_when: false
-
 
 # ---------- APPLY ----------
 - name: Tune VM config (CPU/RAM/agent/boot/scsihw/onboot)
@@ -70,13 +43,6 @@
     tags: "{{ pve_tags | default('') }}"
   delegate_to: localhost
 
-  # --- Read current VM config (no python on pve)
-- name: Read current VM config (qm) via raw
-  ansible.builtin.raw: "/usr/sbin/qm config {{ vmid }}"
-  register: pve_vm_cfg_raw
-  changed_when: false
-  delegate_to: "{{ pve_node }}"
-
 # --- Network bridge (net0)
 - name: Set net0 bridge + MAC (qm) via raw
   ansible.builtin.raw: >-
@@ -93,37 +59,3 @@
       send dhcp-client-identifier {{ dhcpv4_client_id }};
   notify: restart networking
 
-# --- Disks (scsi1..9)
-- name: Add SCSI disks from vm_storage_plan (qm) via raw
-  ansible.builtin.raw: >-
-    qm set {{ vmid | int }}
-    --{{ item.key }} {{
-      (
-        'vault'   if item.value.purpose == 'vault_data' else
-        'logs'    if item.value.purpose == 'audit_logs' else
-        'backups' if item.value.purpose == 'backups_target' else
-        'Secure'
-      )
-    }}:{{ item.value.size | regex_replace('G$','') | int }}
-  loop: "{{ (vm_storage_plan | default({})) | dict2items }}"
-  when:
-    - item.key is match('^scsi[1-9]$')
-    - item.value is mapping
-    - item.value.purpose is defined
-    - item.value.size is defined
-    - _qm_cfg.stdout is not search('^' ~ item.key ~ ':', multiline=True)
-  delegate_to: "{{ pve_node }}"
-
-# --- Add scsi disks from vm_storage_plan if missing
-- name: Add SCSI disks from vm_storage_plan (qm set)
-  ansible.builtin.command: >-
-    qm set {{ vmid | int }}
-    --{{ item.key }} {{ _disk_storage_map[item.value.purpose] | default('Secure') }}:{{ item.value.size | regex_replace('G$','') | int }}
-  loop: "{{ (vm_storage_plan | default({})) | dict2items }}"
-  when:
-    - item.key is match('^scsi[1-9]$')
-    - item.value is mapping
-    - item.value.purpose is defined
-    - item.value.size is defined
-    - _qm_cfg.stdout is not search('^' ~ item.key ~ ':', multiline=True)
-  delegate_to: "{{ pve_node }}"

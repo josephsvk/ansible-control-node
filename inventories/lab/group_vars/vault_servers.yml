@@ -1,0 +1,39 @@
+# --- Role core ---------------------------------------------------------------
+vault_version: "1.15.6"          # rola defaultuje na novšie; nastav explicitne
+vault_install_hashi_repo: false  # zip install (rola podporuje aj repo install) :contentReference[oaicite:2]{index=2}
+vault_install_remotely: true     # sťahuj zip priamo na VM (praktické v homelabe) :contentReference[oaicite:3]{index=3}
+
+# --- Bezpečný režim: nereštartuj automaticky (inak sealed incident) -----------
+vault_service_restart: false     # explicitne podľa varovania v README :contentReference[oaicite:4]{index=4}
+
+# --- Identity + paths (rola ich pozná, ale align s tvojim contractom) ---------
+vault_manage_user: true          # rola vie spravovať vault user :contentReference[oaicite:5]{index=5}
+vault_user: vault
+vault_manage_group: true
+vault_group: vault
+
+# Data/log/run paths v role
+vault_data_path: /var/lib/vault
+vault_log_path: /var/log/vault-audit
+vault_run_path: /run/vault
+
+# --- Listener / API ----------------------------------------------------------
+vault_ui: true
+vault_address: "0.0.0.0"
+vault_port: "8200"
+vault_cluster_address: "{{ ansible_default_ipv4.address }}"
+vault_cluster_port: "8201"
+vault_tls_disable: true
+
+# Rola používa zoznam listenerov (TCP). :contentReference[oaicite:6]{index=6}
+vault_tcp_listeners:
+  - vault_address: "{{ vault_address }}"
+    vault_port: "{{ vault_port }}"
+    vault_cluster_address: "{{ vault_cluster_address }}"
+    vault_tls_disable: "{{ vault_tls_disable }}"
+
+# --- Storage backend: raft ---------------------------------------------------
+vault_backend: raft              # výber backendu :contentReference[oaicite:7]{index=7}
+vault_raft_data_path: "{{ vault_data_path }}"
+vault_raft_node_id: "{{ inventory_hostname_short }}"
+# Pri multi-node clustri doplníš raft retry_join / members (rola to podporuje). :contentReference[oaicite:8]{index=8}

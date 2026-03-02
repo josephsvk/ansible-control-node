@@ -1,0 +1,215 @@
+---
+- name: Preflight checks
+  ansible.builtin.import_tasks: preflight.yml
+  tags: [preflight]
+
+# 5) Stop VM
+- name: Get VM info from Proxmox
+  community.proxmox.proxmox_vm_info:
+    api_host: "{{ pve_api_host }}"
+    api_port: "{{ pve_api_port }}"
+    api_user: "{{ pve_api_user }}"
+    api_token_id: "{{ pve_api_token_id }}"
+    api_token_secret: "{{ pve_api_token_secret }}"
+    validate_certs: "{{ pve_api_validate_certs }}"
+    node: "{{ pve_node }}"
+    vmid: "{{ vmid | int }}"
+  delegate_to: localhost
+  register: _vm_info
+- debug:
+    var: _vm_info
+
+
+- name: Stop VM
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ pve_api_host }}"
+    api_port: "{{ pve_api_port }}"
+    api_user: "{{ pve_api_user }}"
+    api_token_id: "{{ pve_api_token_id }}"
+    api_token_secret: "{{ pve_api_token_secret }}"
+    validate_certs: "{{ pve_api_validate_certs }}"
+    node: "{{ pve_node }}"
+    vmid: "{{ vmid | int }}"
+    state: stopped
+  delegate_to: localhost
+  when: 
+    - _vm_info.proxmox_vms is defined
+    - _vm_info.proxmox_vms | length > 0
+    - _vm_info.proxmox_vms[0].status == 'running'
+
+# 0) Read SSH pubkey content (control node)
+- name: Read public key content (control node)
+  ansible.builtin.slurp:
+    src: "{{ ssh_pub_key_path_local }}"
+  delegate_to: localhost
+  become: false
+  register: _pub
+
+- name: Set ssh pubkey fact
+  ansible.builtin.set_fact:
+    _ssh_pubkey: "{{ (_pub.content | b64decode).strip() }}"
+  changed_when: false
+
+# 1) Create snippet on PVE node
+- name: Ensure snippets dir exists on PVE
+  ansible.builtin.file:
+    path: /var/lib/vz/snippets
+    state: directory
+    mode: "0755"
+  delegate_to: "{{ pve_node }}"
+  become: true
+
+- name: Write cloud-init user-data snippet (hostname + fqdn + dhcp client-id)
+  ansible.builtin.copy:
+    dest: "/var/lib/vz/snippets/{{ vm_name }}-user.yml"
+    mode: "0644"
+    content: |
+      #cloud-config
+      hostname: {{ vm_name }}
+      fqdn: {{ vm_name }}.{{ vm_domain }}
+      manage_etc_hosts: true
+
+      write_files:
+        - path: /etc/systemd/network/99-dhcp-clientid.network
+          permissions: "0644"
+          content: |
+            [Match]
+            Name=eth0
+
+            [DHCP]
+            ClientIdentifier=mac
+  delegate_to: "{{ pve_node }}"
+  become: true
+  register: _snippet
+
+# 2) Clone (fail hard if clone fails)
+- name: Clone VM from template (proxmox_kvm)
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ pve_api_host }}"
+    api_port: "{{ pve_api_port }}"
+    api_user: "{{ pve_api_user }}"
+    api_token_id: "{{ pve_api_token_id }}"
+    api_token_secret: "{{ pve_api_token_secret }}"
+    validate_certs: "{{ pve_api_validate_certs }}"
+
+    node: "{{ pve_node }}"
+    target: "{{ pve_node }}"
+
+    clone: "{{ template_name }}"
+    newid: "{{ vmid | int }}"
+    name: "{{ vm_name }}"
+    full: "{{ pve_clone_full | default(true) | bool }}"
+    timeout: 600
+    state: present
+  delegate_to: localhost
+  register: _clone
+
+# 3) Hardware config (idempotent update)
+- name: Configure VM hardware
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ pve_api_host }}"
+    api_port: "{{ pve_api_port }}"
+    api_user: "{{ pve_api_user }}"
+    api_token_id: "{{ pve_api_token_id }}"
+    api_token_secret: "{{ pve_api_token_secret }}"
+    validate_certs: "{{ pve_api_validate_certs }}"
+    node: "{{ pve_node }}"
+    vmid: "{{ vmid | int }}"
+    cores: "{{ pve_cores }}"
+    memory: "{{ pve_memory }}"
+    agent: "{{ pve_agent }}"
+    onboot: "{{ pve_onboot }}"
+    tags: "{{ pve_tags }}"
+    description: "{{ pve_description }}"
+    update: true
+  delegate_to: localhost
+
+# Tvrdá kontrola: či už ide2 existuje
+- name: Read current ide2 from qm config
+  ansible.builtin.shell: "qm config {{ vmid | int }} | awk -F': ' '/^ide2:/{print $2}'"
+  delegate_to: "{{ pve_node }}"
+  become: true
+  changed_when: false
+  register: _ide2
+
+- name: Flag cloudinit disk present
+  ansible.builtin.set_fact:
+    _ci_disk_present: "{{ (_ide2.stdout | trim) != '' }}"
+  changed_when: false
+
+# Vytvor ide2 len keď chýba
+- name: Ensure cloud-init drive exists only once
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ pve_api_host }}"
+    api_port: "{{ pve_api_port }}"
+    api_user: "{{ pve_api_user }}"
+    api_token_id: "{{ pve_api_token_id }}"
+    api_token_secret: "{{ pve_api_token_secret }}"
+    validate_certs: "{{ pve_api_validate_certs }}"
+    node: "{{ pve_node }}"
+    vmid: "{{ vmid | int }}"
+    update: true
+    ide:
+      ide2: "{{ pve_ci_storage }}:cloudinit"
+  delegate_to: localhost
+  when: not _ci_disk_present
+
+# 4) Cloud-init config (DHCP + vmbr + mac + snippet)
+- name: Configure cloud-init + network + ssh key
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ pve_api_host }}"
+    api_port: "{{ pve_api_port }}"
+    api_user: "{{ pve_api_user }}"
+    api_token_id: "{{ pve_api_token_id }}"
+    api_token_secret: "{{ pve_api_token_secret }}"
+    validate_certs: "{{ pve_api_validate_certs }}"
+    node: "{{ pve_node }}"
+    vmid: "{{ vmid | int }}"
+
+    cicustom: "user={{ pve_ci_storage | default('local') }}:snippets/{{ vm_name }}-user.yml"
+
+    ciuser: "{{ pve_ciuser | default('ansible') }}"
+    sshkeys: "{{ _ssh_pubkey }}"
+
+    net: 
+      "{{ vm_networks }}"
+    ipconfig:
+      ipconfig0: "ip=dhcp"
+    searchdomains: "{{ [vm_domain] }}"
+
+    update: true
+    update_unsafe: true
+  delegate_to: localhost
+
+# disks
+- name: Create disks
+  community.proxmox.proxmox_disk:
+    api_host: "{{ _pve_api_host }}"
+    api_port: "{{ _pve_api_port }}"
+    api_user: "{{ _pve_api_user }}"
+    api_token_id: "{{ _pve_api_token_id }}"
+    api_token_secret: "{{ _pve_api_token_secret }}"
+    vmid: "{{ vmid | int }}"
+    disk: "{{ item.slot }}"
+    storage: "{{ item.storage }}"
+    size: "{{ item.size_gib | int }}"
+    serial: "{{ item.serial }}"
+    state: present
+  loop: "{{ vm_disks }}"
+  loop_control:
+    label: "{{ item.slot }} -> {{ item.storage }} ({{ item.size_gib }}GiB)"
+
+
+# 5) Start VM
+- name: Start VM
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ pve_api_host }}"
+    api_port: "{{ pve_api_port }}"
+    api_user: "{{ pve_api_user }}"
+    api_token_id: "{{ pve_api_token_id }}"
+    api_token_secret: "{{ pve_api_token_secret }}"
+    validate_certs: "{{ pve_api_validate_certs }}"
+    node: "{{ pve_node }}"
+    vmid: "{{ vmid | int }}"
+    state: started
+  delegate_to: localhost

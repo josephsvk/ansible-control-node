@@ -1,0 +1,32 @@
+# roles/pve_vm_provision_kvm/defaults/main.yml
+---
+pve_api_validate_certs: false
+
+# VM identity
+vmid: null
+vm_name: ""
+pve_node: ""                 # compute node where VM will live
+pve_target_node: ""          # optional override
+pve_template_vmid: null
+clone_from_template_vmid: null
+pve_clone_full: true
+
+# Cloud-init
+pve_ciuser: "ansible"
+vm_domain: ""
+domain_name: "local"
+vm_ipconfig0: "ip=dhcp"
+ssh_pub_key_path_local: "{{ ssh_key_path_local }}.pub" 
+vlan: ""
+
+# Lifecycle behavior
+pve_vm_reboot_if_running: true
+pve_vm_start_if_stopped: true
+
+ssh_key_dir_local: "{{ lookup('env','HOME') + '/.ssh' }}"
+ssh_config_dir_local: "{{ ssh_key_dir_local }}/config.d"
+
+ssh_key_name: "{{ vm_name | default(inventory_hostname) }}_ansible_ed25519"
+ssh_key_path_local: "{{ ssh_key_dir_local }}/{{ ssh_key_name }}"
+
+_domain: "{{ vm_domain | default(domain_name | default('local')) }}"

@@ -100,3 +100,5 @@ pve_test_name: "debian12-testclone-v1"
 pve_test_ipconfig0: "ip=dhcp"
 pve_test_ciuser: "ansible"
 pve_test_sshkeys_file: "{{ pve_ci_sshkeys_file }}"
+
+  

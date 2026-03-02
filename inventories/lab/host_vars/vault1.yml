@@ -9,9 +9,16 @@ vm_name: vault1
 vm_type: instance
 os_family: debian
 domain_name: joseph4lansolo.xyz
-clone_from_template_vmid: 9001
+template_vmid: 9001
+template_name: "debian12-golden-v1"
 pve_bridge: vmbr10
 ssh_host: "{{ vm_name }}.{{ domain_name }}"
+
+# MAC deterministic
+vm_mac: "02:00:{{ '%02x' % (vmid | int) }}:aa:bb:cc"
+
+# DHCP config
+vm_ipconfig0: "ip=dhcp"
 
 pve_cores: 4
 pve_memory: 8192
@@ -22,6 +29,7 @@ pve_scsihw: "virtio-scsi-single"
 pve_boot_order: "scsi0;net0"
 pve_tags: "debian,secure,vault"
 pve_description: "HashiCorp Vault – raft + audit + backups"
+pve_clone_full: true
 
 workload:
   type: "vault"
@@ -30,15 +38,37 @@ vm_storage_plan:
   scsi1:
     purpose: "vault_data"
     pool_ref: "secure"
+    serial: "VAULTDATA"
     size: "64G"
   scsi2:
     purpose: "audit_logs"
     pool_ref: "secure"
+    serial: "VAULTAUDIT"
     size: "32G"
   scsi3:
     purpose: "backups_target"
     pool_ref: "secure"
+    serial: "VAULTBACKUP"
     size: "64G"
+
+vm_disks:
+  - slot: scsi1
+    storage: Secure
+    size_gib: 64
+    serial: VAULTDATA
+  - slot: scsi2
+    storage: logs
+    size_gib: 32
+    serial: VAULTAUDIT
+  - slot: scsi3
+    storage: backups
+    size_gib: 64
+    serial: VAULTBACKUP
+
+scsi:
+  scsi1: "Secure:64,format=raw,ssd=1,discard=on,serial=VAULTDATA"
+  scsi2: "Secure:32,format=raw,ssd=1,discard=on,serial=VAULTAUDIT"
+  scsi3: "Secure:64,format=raw,ssd=1,discard=on,serial=VAULTBACKUP" 
 
 # --- OS HARDENING (devsec.hardening.os_hardening) ----------------------------
 
@@ -72,3 +102,43 @@ ssh_use_dns: "no"
 # Toto nie je devsec, ale priamo z tvojho výpisu: Ansible si vytvára /root/.ansible/tmp.
 # Fixni to host_varom, aby remote_tmp išlo do user home (a nie do /root).
 ansible_remote_tmp: "/tmp/.ansible-${USER}/tmp"
+
+
+# DebOps hashicorp role: explicitne vyber aplikácie
+hashicorp__applications: ['vault']
+
+# Override verzie (defaulty v role sú historické)
+hashicorp__version_map:
+  vault: '1.15.6'   # nastav na verziu ktorú chceš
+
+# Vault runtime nastavenia (použije playbook nižšie)
+vault_user: vault
+vault_group: vault
+vault_config_dir: /etc/vault.d
+vault_data_dir: /var/lib/vault
+vault_listen_addr: "0.0.0.0:8200"
+vault_cluster_addr: "10.10.10.22:8201"
+
+# Storage (vyber 1)
+vault_storage: raft
+# vault_storage: file
+
+# Filesystem labely pre 3 contract disky
+vault_fs_label_vault_data: "VAULTDATA"
+vault_fs_label_audit_logs: "VAULTAUDIT"
+vault_fs_label_backups_target: "VAULTBACKUP"
+
+# Mountpointy (align s group_vars)
+vault_data_path: /var/lib/vault
+vault_log_path: /var/log/vault-audit
+vault_backups_dir: /srv/vault-backups
+
+apt_install__base_packages:
+  - 'jq'
+
+ipconfig0: "ip=dhcp"
+# Network (vmbr10 + DHCP)
+       # alebo číslo VLAN, ak chceš tagovať
+
+vm_networks:
+  net0: "virtio,bridge=vmbr10,"

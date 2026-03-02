@@ -1,0 +1,24 @@
+- name: Provision VM via mila.proxmox.vm
+  hosts: all
+  gather_facts: false
+
+  vars:
+    ansible_python_interpreter: "{{ playbook_dir }}/../.venv/bin/python"
+
+  tasks:
+    - name: Create disks
+      community.proxmox.proxmox_disk:
+        api_host: "{{ pve_api_host }}"
+        api_port: "{{ pve_api_port }}"
+        api_user: "{{ pve_api_user }}"
+        api_token_id: "{{ pve_api_token_id }}"
+        api_token_secret: "{{ pve_api_token_secret }}"
+        vmid: "{{ vmid | int }}"
+        disk: "{{ item.slot }}"
+        storage: "{{ item.storage }}"
+        size: "{{ item.size_gib | int }}"
+        serial: "{{ item.serial }}"
+        state: present
+      loop: "{{ vm_disks }}"
+      loop_control:
+        label: "{{ item.slot }} -> {{ item.storage }} ({{ item.size_gib }}GiB)"

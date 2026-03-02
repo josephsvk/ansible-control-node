@@ -1,7 +1,0 @@
-# ===== Defaults (môžu byť prepísané per-VM v inventory) =====
-pve_node_default: "pve"
-pve_bridge_default: "vmbr0"
-pve_ciuser_default: "ansible"
-pve_searchdomain_default: "local"
-pve_ipconfig0_default: "ip=dhcp"
-

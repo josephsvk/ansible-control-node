@@ -1,0 +1,18 @@
+---
+- name: Preflight | normalize api vars
+  ansible.builtin.set_fact:
+    _pve_api_host: "{{ pve_api_host | default('') }}"
+    _pve_api_port: "{{ pve_api_port | default(8006) }}"
+    _pve_api_user: "{{ pve_api_user | default('') }}"
+    _pve_api_token_id: "{{ pve_api_token_id | default('') }}"
+    _pve_api_token_secret: "{{ pve_api_token_secret | default('') }}"
+  changed_when: false
+
+- name: Preflight | assert required vars exist
+  ansible.builtin.assert:
+    that:
+      - (_pve_api_host | length) > 0
+      - (_pve_api_port | int) > 0
+      - (_pve_api_user | length) > 0
+    fail_msg: "Missing PVE API vars: pve_api_host/pve_api_port/pve_api_user"
+  changed_when: false
