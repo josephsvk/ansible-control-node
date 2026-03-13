@@ -1,0 +1,17 @@
+# roles/proxmox_access_mgmt/tasks/pools.yml
+
+- name: Pools | list existing pools
+  ansible.builtin.command: "pvesh get /pools --output-format json"
+  register: _pools
+  changed_when: false
+
+- name: Pools | build existing pool set
+  ansible.builtin.set_fact:
+    _pool_ids: "{{ (_pools.stdout | from_json | map(attribute='poolid') | list) | default([]) }}"
+
+- name: Pools | create missing pools
+  ansible.builtin.command: "pvesh create /pools -poolid {{ item.poolid }}{% if item.comment is defined %} -comment {{ item.comment | quote }}{% endif %}"
+  loop: "{{ proxmox_access.pools }}"
+  when: item.poolid not in _pool_ids
+  register: _pool_create
+  changed_when: true

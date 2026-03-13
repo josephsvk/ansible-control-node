@@ -1,0 +1,30 @@
+# roles/proxmox_access_mgmt/tasks/users.yml
+
+- name: Users | list existing users
+  ansible.builtin.command: "pveum user list --output-format json"
+  register: _users
+  changed_when: false
+
+- name: Users | build existing user set
+  ansible.builtin.set_fact:
+    _user_ids: "{{ (_users.stdout | from_json | map(attribute='userid') | list) | default([]) }}"
+
+- name: Users | create missing users
+  ansible.builtin.command: >-
+    pveum user add {{ item.user }}
+    {% if item.comment is defined %}-comment {{ item.comment | quote }}{% endif %}
+    {% if item.enable is defined %}-enable {{ (item.enable | bool) | ternary(1,0) }}{% endif %}
+    {% if item.expire is defined %}-expire {{ item.expire }}{% endif %}
+  loop: "{{ proxmox_access.users }}"
+  when: item.user not in _user_ids
+  changed_when: true
+
+- name: Users | update existing users
+  ansible.builtin.command: >-
+    pveum user modify {{ item.user }}
+    {% if item.comment is defined %}-comment {{ item.comment | quote }}{% endif %}
+    {% if item.enable is defined %}-enable {{ (item.enable | bool) | ternary(1,0) }}{% endif %}
+    {% if item.expire is defined %}-expire {{ item.expire }}{% endif %}
+  loop: "{{ proxmox_access.users }}"
+  when: item.user in _user_ids
+  changed_when: true

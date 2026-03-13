@@ -154,7 +154,7 @@
     update: true
     ciuser: "{{ _ciuser }}"
     ipconfig:
-      ipconfig0: "{{ _ipconfig0 }}"cluster
+      ipconfig0: "{{ _ipconfig0 }}cluster"
     searchdomains:
       - "{{ _domain }}"
     sshkeys: "{{ _ssh_pubkey }}"

@@ -4,23 +4,13 @@
   gather_facts: false
 
   vars:
-    ansible_python_interpreter: "{{ playbook_dir }}/../.venv/bin/python"
+    ansible_python_interpreter: "{{ playbook_di - role: pve_clone_api_v
+      tags: ["step2"]r }}/../.venv/bin/python"
 
   roles:
     - role: ssh_key_gen_v1
       tags: ["step1"]
-      
-    - role: pve_clone_api_v4
-      tags: ["step2"]
 
-    - role: pve_vm_net_disks_set_v1
-      tags: ["step3b"]
-
-    - role: pve_vm_hw_set_v1
-      tags: ["step3"]
-
-    - role: pve_vm_mac
-      tags: ["step3c"]
 
 # Add host to managed group after provisioning 
 

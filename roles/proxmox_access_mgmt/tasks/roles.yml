@@ -1,0 +1,22 @@
+# roles/proxmox_access_mgmt/tasks/roles.yml
+
+- name: Roles | list existing roles
+  ansible.builtin.command: "pveum role list --output-format json"
+  register: _roles
+  changed_when: false
+
+- name: Roles | build existing role set
+  ansible.builtin.set_fact:
+    _role_names: "{{ (_roles.stdout | from_json | map(attribute='roleid') | list) | default([]) }}"
+
+- name: Roles | create missing roles
+  ansible.builtin.command: "pveum role add {{ item.name }} -privs {{ item.privs | quote }}"
+  loop: "{{ proxmox_access.roles }}"
+  when: item.name not in _role_names
+  changed_when: true
+
+- name: Roles | update role privs if changed
+  ansible.builtin.command: "pveum role modify {{ item.name }} -privs {{ item.privs | quote }}"
+  loop: "{{ proxmox_access.roles }}"
+  when: item.name in _role_names
+  changed_when: true

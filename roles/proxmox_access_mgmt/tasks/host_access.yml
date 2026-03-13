@@ -1,0 +1,108 @@
+# roles/proxmox_access_mgmt/tasks/host_access.yml
+
+- name: Host access | validate users list
+  ansible.builtin.assert:
+    that:
+      - proxmox_host_access.users is iterable
+      - proxmox_host_access.users is not string
+    fail_msg: "proxmox_host_access.users must be a list."
+
+- name: Host access | validate user entries
+  ansible.builtin.assert:
+    that:
+      - item.name is defined
+      - (item.name | string | length) > 0
+      - (item.state | default('present')) in ['present', 'absent']
+      - (item.password_mode | default('unmanaged')) in ['locked', 'hash', 'unmanaged']
+      - (item.password_mode | default('unmanaged')) != 'hash' or ((item.password_hash | default('') | string | length) > 0)
+      - item.sudo_nopasswd_commands is not defined or item.sudo_nopasswd_commands is not string
+      - (item.sudo_nopasswd_commands | default([]) | select('match', '^/') | list | length) == (item.sudo_nopasswd_commands | default([]) | length)
+    fail_msg: >-
+      Invalid proxmox_host_access.users entry for {{ item.name | default('UNKNOWN') }}.
+      password_mode must be locked/hash/unmanaged, hash requires password_hash,
+      and sudo_nopasswd_commands must be a list of absolute paths.
+  loop: "{{ proxmox_host_access.users }}"
+  loop_control:
+    label: "{{ item.name | default('UNKNOWN') }}"
+
+- name: Host access | ensure sudo package present
+  ansible.builtin.apt:
+    name: sudo
+    state: present
+    update_cache: false
+
+- name: Host access | remove users marked absent
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    state: absent
+  loop: "{{ proxmox_host_access.users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: (item.state | default('present')) == 'absent'
+
+- name: Host access | ensure users (password unmanaged)
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    state: present
+    shell: "{{ item.shell | default('/bin/bash') }}"
+    create_home: "{{ item.create_home | default(true) }}"
+    groups: "{{ (item.groups | default([]) | length > 0) | ternary(item.groups, omit) }}"
+    append: "{{ (item.groups | default([]) | length > 0) | ternary(true, omit) }}"
+  loop: "{{ proxmox_host_access.users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - (item.state | default('present')) == 'present'
+    - (item.password_mode | default('unmanaged')) == 'unmanaged'
+
+- name: Host access | ensure users (password locked)
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    state: present
+    shell: "{{ item.shell | default('/bin/bash') }}"
+    create_home: "{{ item.create_home | default(true) }}"
+    groups: "{{ (item.groups | default([]) | length > 0) | ternary(item.groups, omit) }}"
+    append: "{{ (item.groups | default([]) | length > 0) | ternary(true, omit) }}"
+    password: "!"
+    update_password: always
+  loop: "{{ proxmox_host_access.users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - (item.state | default('present')) == 'present'
+    - (item.password_mode | default('unmanaged')) == 'locked'
+
+- name: Host access | ensure users (password hash managed)
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    state: present
+    shell: "{{ item.shell | default('/bin/bash') }}"
+    create_home: "{{ item.create_home | default(true) }}"
+    groups: "{{ (item.groups | default([]) | length > 0) | ternary(item.groups, omit) }}"
+    append: "{{ (item.groups | default([]) | length > 0) | ternary(true, omit) }}"
+    password: "{{ item.password_hash }}"
+    update_password: always
+  loop: "{{ proxmox_host_access.users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - (item.state | default('present')) == 'present'
+    - (item.password_mode | default('unmanaged')) == 'hash'
+
+- name: Host access | configure sudoers command whitelist
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/95-proxmox-host-access
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+    content: |
+      # Managed by Ansible (role: proxmox_access_mgmt)
+      # Per-user command whitelist for passwordless sudo.
+      {% for u in proxmox_host_access.users | default([]) %}
+      {% set _state = u.state | default('present') %}
+      {% set _commands = u.sudo_nopasswd_commands | default([]) | unique | list %}
+      {% if _state == 'present' and (_commands | length > 0) %}
+      {{ u.name }} ALL=(ALL) NOPASSWD: {{ _commands | join(', ') }}
+      {% endif %}
+      {% endfor %}

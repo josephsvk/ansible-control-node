@@ -1,0 +1,36 @@
+# roles/proxmox_access_mgmt/tasks/main.yml
+
+- name: Preflight | pveum present
+  ansible.builtin.stat:
+    path: /usr/sbin/pveum
+  register: _pveum
+
+- name: Preflight | fail if missing
+  ansible.builtin.fail:
+    msg: "pveum not found at /usr/sbin/pveum (run role on Proxmox node / delegate_to Proxmox)."
+  when: not _pveum.stat.exists
+
+- name: Apply pools
+  ansible.builtin.import_tasks: pools.yml
+
+- name: Apply roles
+  ansible.builtin.import_tasks: roles.yml
+
+- name: Apply users
+  ansible.builtin.import_tasks: users.yml
+
+- name: Apply tokens
+  ansible.builtin.import_tasks: tokens.yml
+
+- name: Apply ACLs
+  ansible.builtin.import_tasks: acls.yml
+
+- name: Apply host access (Linux users + sudoers)
+  ansible.builtin.import_tasks: host_access.yml
+  when: proxmox_host_access.enabled | bool
+
+- name: Debug effective permissions (optional)
+  when: proxmox_access_debug_permissions | bool
+  ansible.builtin.command: "pveum user permissions {{ item.user | default('root@pam') }} --path {{ proxmox_access_debug_path }}"
+  loop: "{{ proxmox_access.users }}"
+  changed_when: false

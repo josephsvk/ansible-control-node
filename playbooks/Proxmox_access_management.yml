@@ -1,0 +1,6 @@
+- name: Proxmox access management
+  hosts: pve_nodes
+  gather_facts: false
+  become: true
+  roles:
+    - proxmox_access_mgmt

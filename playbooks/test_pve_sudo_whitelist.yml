@@ -1,0 +1,89 @@
+---
+- name: Test passwordless sudo whitelist via SSH
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    sudo_test_ssh_user: "opentofu"
+    sudo_test_ssh_host: "pve"
+    sudo_test_ssh_key: "{{ lookup('env', 'HOME') }}/.ssh/opentofu_proxmox"
+
+    sudo_test_allowed_commands:
+      - name: "qm-list"
+        cmd: "/usr/sbin/qm list"
+      - name: "true"
+        cmd: "/usr/bin/true"
+
+    sudo_test_denied_commands:
+      - name: "id"
+        cmd: "/usr/bin/id"
+
+  tasks:
+    - name: Preflight | SSH private key must exist
+      ansible.builtin.stat:
+        path: "{{ sudo_test_ssh_key }}"
+      register: _sudo_test_key
+
+    - name: Preflight | fail when SSH private key is missing
+      ansible.builtin.assert:
+        that:
+          - _sudo_test_key.stat.exists
+        fail_msg: "SSH key not found: {{ sudo_test_ssh_key }}"
+
+    - name: Allowed | command must succeed with sudo -n
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - "{{ sudo_test_ssh_key }}"
+          - -o
+          - BatchMode=yes
+          - "{{ sudo_test_ssh_user }}@{{ sudo_test_ssh_host }}"
+          - "sudo -n {{ item.cmd }} >/dev/null 2>&1 && echo __ALLOW_OK__"
+      register: _allowed_results
+      changed_when: false
+      failed_when: false
+      loop: "{{ sudo_test_allowed_commands }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Allowed | assert sudo -n works without password
+      ansible.builtin.assert:
+        that:
+          - item.rc == 0
+          - item.stdout is search('__ALLOW_OK__')
+        fail_msg: >-
+          Expected allowed command to run without password but it failed:
+          {{ item.item.name }} (rc={{ item.rc }}, stdout='{{ item.stdout }}', stderr='{{ item.stderr }}')
+      loop: "{{ _allowed_results.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    - name: Denied | command must be rejected by sudo whitelist
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - "{{ sudo_test_ssh_key }}"
+          - -o
+          - BatchMode=yes
+          - "{{ sudo_test_ssh_user }}@{{ sudo_test_ssh_host }}"
+          - "if sudo -n {{ item.cmd }} >/dev/null 2>&1; then echo __DENY_FAIL__; else echo __DENY_OK__; fi"
+      register: _denied_results
+      changed_when: false
+      failed_when: false
+      loop: "{{ sudo_test_denied_commands }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Denied | assert command is not allowed
+      ansible.builtin.assert:
+        that:
+          - item.rc == 0
+          - item.stdout is search('__DENY_OK__')
+        fail_msg: >-
+          Expected denied command to be blocked by sudo whitelist:
+          {{ item.item.name }} (rc={{ item.rc }}, stdout='{{ item.stdout }}', stderr='{{ item.stderr }}')
+      loop: "{{ _denied_results.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"

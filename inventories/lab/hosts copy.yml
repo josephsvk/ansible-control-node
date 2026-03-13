@@ -1,0 +1,101 @@
+all:
+  children:
+
+    # =========================
+    # hashicorp vault 
+    # =========================
+    vault_servers:
+      hosts:
+        vault1:
+
+    # =========================
+    # Mount managmetent 
+    # (definície NFS shareov a ich mountovania)
+    # =========================
+
+    nfs_server:
+      hosts:
+        pve:
+
+    workloads_media_access:
+      hosts:
+    
+    workloads_media_management:
+      hosts:
+
+    workloads_secure_access:
+      hosts:
+        aufik:
+
+
+    # =========================
+    # Proxmox nodes (reálne stroje)
+    # =========================
+    pve_nodes:
+      hosts:
+        pve:
+
+    # =========================
+    # Proxmox VM definície (NEPRIPÁJAŤ SA SSH)
+    # - slúžia len ako "objects" pre qm/API
+    # =========================
+    pve_vms:
+      children:
+
+        # ---- Templates
+        pve_templates:
+          children:
+            haos_templates:
+              hosts:
+                tpl_haos_17:
+            debian_templates:
+              hosts:
+                tpl_debian_12:
+
+
+    # =========================
+    # SSH-managed hosts (reálne OS, kam sa Ansible pripája)
+    # Sem patria: VPS, servery, workstations, a VM až keď majú IP+SSH
+    # =========================
+    managed:
+      children:
+
+        pve_managed:
+          hosts:
+            pve:
+            debiantclv1:
+            aufik:
+            vault1:
+
+        vps:
+          hosts:
+
+        servers:
+          hosts:
+
+        workstations:
+          hosts:
+
+        # VM po deployi (keď už majú sieť a SSH)
+        # Nezamieňaj s pve_vms definíciami.
+        vms_ssh:
+          children:
+            haos_vms_ssh:
+              hosts:
+                homeassistant_duko:
+            debian_vms_ssh:
+              hosts:
+                testgoldimage:
+
+    # =========================
+    # WireGuard skupiny (cieľové stroje s reálnou konektivitou)
+    # =========================
+    wg_servers:
+      hosts:
+        vps_hetz_1:
+
+    wg2_media_peers:
+      hosts:
+        
+    wg3_mgmt_peers:
+      hosts:

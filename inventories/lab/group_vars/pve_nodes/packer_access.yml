@@ -1,0 +1,102 @@
+# group_vars/pve_nodes/packer_access.yml
+
+proxmox_access_fail_on_token_secret_echo: false   # nepoužívaj; nahradené no_log
+proxmox_access_debug_permissions: false
+
+proxmox_access:
+  pools:
+    - poolid: "packer"
+      comment: "Packer build pool"
+
+  roles:
+    - name: "PackerVM"
+      privs: >-
+        VM.Allocate VM.Audit VM.Clone
+        VM.Config.Disk VM.Config.CDROM VM.Config.CPU VM.Config.Memory
+        VM.Config.Network VM.Config.Options VM.Config.Cloudinit VM.Config.HWType
+        VM.Console VM.PowerMgmt
+        Datastore.Audit Datastore.AllocateSpace
+        SDN.Use
+
+  users:
+    - user: "packer@pve"
+      comment: "Packer user"
+      enable: true
+      expire: 0
+
+  tokens:
+    - user: "packer@pve"
+      tokenid: "packer"
+      privsep: 1
+      comment: "Packer token (privsep)"
+
+  acls:
+    # USER ACL na pool
+    - path: "/pool/packer"
+      user: "packer@pve"
+      role: "PackerVM"
+      propagate: true
+
+    # TOKEN ACL na pool (privsep=1 => musí byť)
+    - path: "/pool/packer"
+      token: "packer@pve!packer"
+      role: "PackerVM"
+      propagate: true
+
+    # STORAGE ACL (prakticky nutné pre ISO/snippets/disky; uprav podľa reálnych storage ID)
+    - path: "/storage/local"
+      user: "packer@pve"
+      role: "PackerVM"
+      propagate: true
+
+    - path: "/storage/local"
+      token: "packer@pve!packer"
+      role: "PackerVM"
+      propagate: true
+
+    - path: "/storage/local-zfs"
+      user: "packer@pve"
+      role: "PackerVM"
+      propagate: true
+
+    - path: "/storage/local-zfs"
+      token: "packer@pve!packer"
+      role: "PackerVM"
+      propagate: true
+
+    - path: "/vms"
+      user: "packer@pve"
+      role: "PackerVM"
+      propagate: true
+
+    - path: "/vms"
+      token: "packer@pve!packer"
+      role: "PackerVM"
+      propagate: true
+
+    - path: "/sdn/zones/localnetwork/vmbr0"
+      user: "packer@pve"
+      role: "PackerVM"
+      propagate: true
+
+    - path: "/sdn/zones/localnetwork/vmbr0"
+      token: "packer@pve!packer"
+      role: "PackerVM"
+      propagate: true
+
+# Linux account used by Packer SSH communicator on Proxmox host.
+# SSH public key management for this account is handled outside this role.
+proxmox_host_access:
+  enabled: true
+  users:
+    - name: "opentofu"
+      state: present
+      shell: "/bin/bash"
+      create_home: true
+      groups:
+        - "sudo"
+      password_mode: "locked"
+      sudo_nopasswd_commands:
+        - "/usr/sbin/qm"
+        - "/usr/bin/true"
+        - "/bin/true"

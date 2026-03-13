@@ -1,0 +1,21 @@
+# roles/proxmox_access_mgmt/defaults/main.yml
+
+# Konfigurácia v jednom objekte
+proxmox_access:
+  pools: []          # [{ poolid: "packer", comment: "..." }]
+  roles: []          # [{ name: "PACKER_VM_BUILDER", privs: "VM.Allocate ..." }]
+  users: []          # [{ user: "packer@pve", comment: "...", enable: true, expire: 0 }]
+  tokens: []         # [{ user: "packer@pve", tokenid: "packer", privsep: 1, comment: "..."}]
+  acls: []           # [{ path: "/pool/packer", role: "PACKER_VM_BUILDER", user: "packer@pve" } or { token: "packer@pve!packer" }]
+
+# Host-level Linux access management (optional)
+proxmox_host_access:
+  enabled: false
+  users: []          # [{ name: "packer", state: "present", shell: "/bin/bash", create_home: true, groups: ["sudo"], password_mode: "locked|hash|unmanaged", password_hash: "...", sudo_nopasswd_commands: ["/usr/sbin/qm"] }]
+
+# Bezpečnostné brzdy
+proxmox_access_fail_on_token_secret_echo: true
+
+# Voliteľne ukázať efektívne práva (debug)
+proxmox_access_debug_permissions: false
+proxmox_access_debug_path: "/"

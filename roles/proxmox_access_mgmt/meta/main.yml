@@ -1,0 +1,8 @@
+# roles/proxmox_access_mgmt/meta/main.yml
+galaxy_info:
+  role_name: proxmox_access_mgmt
+  author: "you"
+  description: "Manage Proxmox VE pools, roles, users, tokens and ACLs via pveum/pvesh."
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []  

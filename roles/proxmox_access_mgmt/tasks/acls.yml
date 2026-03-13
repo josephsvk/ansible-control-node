@@ -1,0 +1,12 @@
+# roles/proxmox_access_mgmt/tasks/acls.yml
+
+- name: ACLs | apply (idempotent via modify)
+  ansible.builtin.command: >-
+    pveum acl modify {{ item.path }}
+    {% if item.user is defined %}-user {{ item.user }}{% endif %}
+    {% if item.token is defined %}-token {{ item.token | quote }}{% endif %}
+    -role {{ item.role }}
+    {% if item.propagate is defined %}-propagate {{ (item.propagate | bool) | ternary(1,0) }}{% endif %}
+  loop: "{{ proxmox_access.acls }}"
+  changed_when: true
+  no_log: true

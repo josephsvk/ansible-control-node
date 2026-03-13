@@ -1,0 +1,38 @@
+# roles/proxmox_access_mgmt/tasks/tokens.yml
+
+- name: Tokens | list existing tokens (per user)
+  ansible.builtin.command: "pveum user token list {{ item }} --output-format json"
+  register: _token_lists
+  loop: "{{ proxmox_access.tokens | map(attribute='user') | unique | list }}"
+  changed_when: false
+  failed_when: false
+
+- name: Tokens | build token map user -> [tokenid]
+  ansible.builtin.set_fact:
+    _tokens_by_user: >-
+      {{
+        dict(
+          _token_lists.results
+          | map(attribute='item')
+          | zip(
+              _token_lists.results
+              | map(attribute='stdout')
+              | map('default','[]')
+              | map('from_json')
+              | map('map', attribute='tokenid')
+              | map('list')
+              | list
+          )
+        )
+      }}
+
+- name: Tokens | create missing tokens (privsep enforced)
+  ansible.builtin.command: >-
+    pveum user token add {{ item.user }} {{ item.tokenid }}
+    --privsep {{ item.privsep | default(1) }}
+    {% if item.comment is defined %}-comment {{ item.comment | quote }}{% endif %}
+  loop: "{{ proxmox_access.tokens }}"
+  when: item.tokenid not in (_tokens_by_user[item.user] | default([]))
+  register: _token_create
+  changed_when: true
+  no_log: true
